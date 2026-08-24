@@ -120,6 +120,7 @@ URI workers claim agents / feedbacks / `agent_manifest` / `uri_documents` (not w
 | `Claimed error manifests batch size=` | Reprocess download-error queue |
 | `Claimed refresh docs batch size=` | Reprocess off-chain &gt;15d queue |
 | `Refresh unchanged doc_id=` | Document same; TTL renewed only |
+| `stamped fetched_at` / `refresh_error:` | Refresh fetch failed; previous JSON kept; `fetched_at` advanced so the row leaves the current 15d window |
 | `Time budget reached` | Soft stop; exit 0; next cron continues |
 | Playwright / scrape / download failures | Recorded as download error on manifest; `agent_uri_reprocess` retries (max 3) |
 
@@ -130,6 +131,7 @@ URI workers claim agents / feedbacks / `agent_manifest` / `uri_documents` (not w
 | `agents_pending` stuck high | Resolve not running / claim index miss | Check GHA `agent-uri-resolve` schedule; confirm `is_uri_processed = false` + indexes in schema |
 | Manifests with `has_download_error` forever | Exhausted `reprocess_count` (≥3) or not due yet | Wait 3d between retries; or set `does_need_manual_reprocess`; inspect URI from agents/feedbacks |
 | Off-chain docs never refresh | Wrong schedule or not HTTP/IPFS | Reprocess only at 06/18; hex/on-chain excluded by design |
+| Same `doc_id` claimed all run; `refresh=` high but queue stuck | Failed fetch did not stamp `fetched_at` (fixed: stamp on fail) | Confirm worker ≥ stamp-on-fail commit; look for `refresh_error:` on `source_gateway` |
 | Duplicate URI content across rows | Legacy pre-`uri_hash` data | Schema migration `00066` path; upsert is by `uri_hash` |
 
 **Re-run:** Actions → **agent-uri-resolve** or **agent-uri-reprocess** → **Run workflow**.

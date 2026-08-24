@@ -107,7 +107,7 @@ Activity flows 15d: `0 0 1,15 * *` + `0 */4 * * *` UTC + `workflow_dispatch`.
 | LP positions discovery | `does_need_lp_discovery` after portfolio discovery | NFT + `lp_pools` → `wallet_lp_positions_upsert` |
 | activity flows 15d | `is_valid_activity_flows` + due clock + not `Dormant_*` + valid agent | Adapter → INSERT `wallets.wallet_activity_transfers`; empty OK |
 | agent URI resolve | agents / on-chain / external feedbacks pending | Resolve/materialize → `uri_documents` + `agent_manifest` |
-| agent URI reprocess | download errors (max 3) + off-chain docs &gt;15d | Retry + refresh; `is_processed` only if document changed |
+| agent URI reprocess | download errors (max 3) + off-chain docs &gt;15d | Retry + refresh; `is_processed` only if document changed; failed refresh still stamps `fetched_at` |
 | AI agent classifier | `does_need_ai_category_process` | LLM → `ai_category_*` on `web_dashboard.agents`; rotate `llm.models` by daily cap |
 
 ## Token contracts discovery
@@ -219,7 +219,7 @@ flowchart LR
 | Worker | Role |
 |---|---|
 | [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md) | First ingest: agents → on-chain feedbacks → external URI/endpoint; nested/DID; IPFS public gateways + Pinata dedicated last; ScrapingAnt last HTTP |
-| [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md) | Retry download errors (max 3); refresh HTTP/IPFS docs &gt;15d; reset `is_processed` only if document changed |
+| [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md) | Retry download errors (max 3); refresh HTTP/IPFS docs &gt;15d; reset `is_processed` only if document changed. Failed refresh keeps previous JSON but stamps `fetched_at` / 15d TTL (`source_gateway=refresh_error:…`) so the claim cursor advances |
 
 Hex / on-chain synthetic docs are **not** TTL-refreshed — subgraph import requeues via flags into resolve. Manifest **entity consume** is still deferred.
 

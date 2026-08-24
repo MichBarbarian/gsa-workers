@@ -140,7 +140,7 @@ Probe/enrich census columns were dropped. Do not revive them ([DEPRECATION.md](.
 | `uri_documents.uri` | Canonical URI string (may be long; uniqueness is on hash) |
 | `uri_documents.uri_hash` | `md5(uri)` UNIQUE lookup key for upsert |
 | `uri_documents.document` | Resolved JSON payload |
-| `uri_documents.fetched_at` / `expires_at` | Refresh clock; reprocess refreshes off-chain when `fetched_at` &gt; 15d |
+| `uri_documents.fetched_at` / `expires_at` | Refresh clock (last **attempt**, including failed fetches); reprocess claims off-chain when `fetched_at` &gt; 15d |
 | `uri_documents.status` | e.g. `valid` for refresh eligibility |
 | `agent_manifest.uri_document_id` | FK to canonical doc |
 | `agent_manifest.provider` / ids | Link back to `agents` or `registration_feedbacks` to recover URI (no `url` column) |
@@ -583,6 +583,11 @@ FROM erc_8004.agent_manifest
 WHERE has_download_error IS TRUE
 GROUP BY 1
 ORDER BY 1;
+
+-- Recent failed refresh attempts (JSON kept; clock advanced)
+SELECT count(*) AS refresh_error_stamped
+FROM erc_8004.uri_documents
+WHERE source_gateway LIKE 'refresh_error:%';
 ```
 
 Re-run: **Actions** → `agent-uri-resolve` or `agent-uri-reprocess` → **Run workflow**. Worker READMEs: [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md), [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md).
