@@ -114,6 +114,20 @@ SET
 WHERE id = %(id)s
 """
 
+# Failed refresh: keep previous document/status, but stamp the attempt so the
+# 15d claim cursor advances (fetched_at = last try, including errors).
+STAMP_REFRESH_ATTEMPT_SQL = """
+UPDATE erc_8004.uri_documents
+SET
+  fetched_at = NOW(),
+  expires_at = NOW() + interval '15 days',
+  last_accessed_at = NOW(),
+  fetch_count = COALESCE(fetch_count, 0) + 1,
+  source_gateway = %(source_gateway)s,
+  updated_at = NOW()
+WHERE id = %(id)s
+"""
+
 RESET_MANIFESTS_IF_DOC_CHANGED_SQL = """
 UPDATE erc_8004.agent_manifest
 SET
@@ -346,6 +360,25 @@ class Database:
             self._conn.commit()
 
         self._run_with_db_retry("renew_document_ttl", _renew)
+
+    def stamp_refresh_attempt_failed(self, doc_id: int, *, error_message: str) -> None:
+        """Record a failed fetch without replacing `document` / `status`."""
+        gateway = error_message.strip() or "refresh_error"
+        if not gateway.startswith("refresh_error"):
+            gateway = f"refresh_error:{gateway}"
+        if len(gateway) > 200:
+            gateway = gateway[:197] + "..."
+
+        def _stamp() -> None:
+            assert self._conn is not None
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    STAMP_REFRESH_ATTEMPT_SQL,
+                    {"id": doc_id, "source_gateway": gateway},
+                )
+            self._conn.commit()
+
+        self._run_with_db_retry("stamp_refresh_attempt_failed", _stamp)
 
     def reset_manifests_for_document(self, uri_document_id: int) -> int:
         def _reset() -> int:

@@ -171,7 +171,7 @@ Import requeues hex/on-chain when source fields change (`is_uri_processed` / `is
 **Live.** Complements resolve on the other daily slots (`06:00` / `18:00`).
 
 1. **Errors** — `agent_manifest` with `has_download_error` (max `reprocess_count` **3**; first try immediate; later tries need `updated_at` &gt; 3 days ago) or `does_need_manual_reprocess`. URI recovered from `agents` / `registration_feedbacks` via `provider`. On success clears error flags and sets `is_processed=false`.
-2. **Refresh** — `uri_documents` with `status=valid`, HTTP/IPFS URI, `fetched_at` older than **15 days**. Hex / `data:` / `internal_on_chain_id_*` excluded. After fetch: if `document` **changed** → upsert + `is_processed=false` on linked manifests; if unchanged → renew TTL only.
+2. **Refresh** — `uri_documents` with `status=valid`, HTTP/IPFS URI, `fetched_at` older than **15 days**. Hex / `data:` / `internal_on_chain_id_*` excluded. After fetch: if `document` **changed** → upsert + `is_processed=false` on linked manifests; if unchanged → renew TTL only; if fetch **fails** → keep previous JSON, still stamp `fetched_at` / 15d TTL (`source_gateway=refresh_error:…`) so the claim cursor advances.
 
 Reuses resolve/handlers from `agent_uri_resolve` via `sys.path`. Indexes: `idx_am_pending_reprocess`, `idx_ud_pending_refresh_offchain`.
 

@@ -9,6 +9,8 @@ GHA worker for:
 
 After a successful refresh, linked manifests get `is_processed = false` **only if** `document` changed.
 
+Failed refresh **keeps** the previous `document` / `status='valid'`, but still stamps `fetched_at` / `expires_at` (15d) and `source_gateway=refresh_error:…` so the attempt is dated and the row leaves the current claim window.
+
 Reuses resolve/handlers from `workers/agent_uri_resolve/src` via `sys.path`.
 
 Requires schema migration `00000000000069_uri_reprocess_refresh_indexes.sql`.

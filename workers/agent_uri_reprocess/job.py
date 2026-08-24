@@ -179,10 +179,13 @@ async def process_refresh_doc(
         try:
             result = await resolver.resolve(uri, force_refresh=True)
             if not result.ok or result.document is None:
+                err = result.error or "resolve_failed"
+                db.stamp_refresh_attempt_failed(doc_id, error_message=err)
                 logger.warning(
-                    "Refresh fetch failed doc_id=%s err=%s (keeping previous document)",
+                    "Refresh fetch failed doc_id=%s err=%s "
+                    "(kept previous document; stamped fetched_at)",
                     doc_id,
-                    result.error,
+                    err,
                 )
                 return
 
@@ -207,6 +210,12 @@ async def process_refresh_doc(
                 logger.info("Refresh unchanged doc_id=%s (TTL renewed)", doc_id)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Refresh exception doc_id=%s: %s", doc_id, exc)
+            try:
+                db.stamp_refresh_attempt_failed(doc_id, error_message=str(exc))
+            except Exception:
+                logger.exception(
+                    "Failed to stamp refresh attempt doc_id=%s", doc_id
+                )
 
 
 async def run_job() -> int:
