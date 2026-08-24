@@ -22,6 +22,7 @@ Unified Python batch workers for [Global Score Agent](https://www.globalscoreage
 | [`ai_agent_classifier`](./workers/ai_agent_classifier/README.md) | 0, 6, 12, 18h | `web_dashboard.agents.does_need_ai_category_process` | LLM categories → `ai_category_*` (+ `llm.models_requests` rate limits) |
 | [`on_demand_backfill`](./workers/on_demand_backfill/README.md) | 0, 6, 12, 18h | per-step queues (Ethos history/scores, ERC-8183 + Virtual ACP + Olas Mech satellites) | Orchestrator catch-up after late wallet link |
 | [`erc8257_tools_import`](./workers/erc8257_tools_import/README.md) | 04:00 daily | n/a (reference data) | agenttoolindex dump → `erc_8257.tools` (+ sync_state watermark) |
+| [`agent_endpoint_liveness`](./workers/agent_endpoint_liveness/README.md) | 0, 6, 12, 18h | HTTP(s) locators in `agent_metadata_services` due on 15d clock | HEAD/GET census → `erc_8004.agent_endpoint_health` |
 
 Pending: [LP 15-day refresh](./docs/PENDING_LP_POSITIONS.md). Manifest **consume** (entity SPs) not built yet. `ethos_enrich` → absorbed by `on_demand_backfill` ([DEPRECATION](./docs/DEPRECATION.md)).
 
@@ -74,6 +75,7 @@ Reference-data: `dune_queries_import` (4 Dune queries → upserts); `token_price
 | agent URI reprocess | 4 | 20 | n/a | 19800 |
 | AI agent classifier | 1 | 20 | n/a | 19800 |
 | on-demand backfill | Ethos 3 / satellites 5 | Ethos 10 / satellites 100 | 7200 | 19800 |
+| endpoint liveness 15d | 20 (per-host 2) | 40 | 7200 | 19800 |
 
 Daily also sets `WORKER_ID` to `worker-a` or `worker-b`. Origin/monthly set `SKIP_ELIGIBLE_COUNT=1`.
 
@@ -123,6 +125,9 @@ gsa-workers/
 │   ├── erc8257_tools_import/
 │   │   ├── job.py
 │   │   └── src/          # db, agenttoolindex
+│   ├── agent_endpoint_liveness/
+│   │   ├── job.py
+│   │   └── src/          # db, probe, ssrf
 │   ├── token_prices_import/
 │   │   ├── job.py
 │   │   └── src/          # db, dexscreener, coingecko

@@ -51,6 +51,8 @@ flowchart TB
   dune --> brT[wallets.bridge_addresses]
   dune --> ofacT[wallets.ofac_sanction_addresses]
   erc8257 --> tools8257[erc_8257.tools]
+  activityFlows --> wat
+  liveness[agent_endpoint_liveness] --> aeh[erc_8004.agent_endpoint_health]
   lpRefresh -.-> wlp
   uriResolve --> ud[erc_8004.uri_documents]
   uriResolve --> am[erc_8004.agent_manifest]
@@ -78,6 +80,7 @@ flowchart TB
 | 12 | [`ai_agent_classifier`](../workers/ai_agent_classifier/README.md) | Claim (`web_dashboard.agents`) | 0/6/12/18 | `does_need_ai_category_process` | exact-hash copy or LLM | `ai_category_*` + `ai_category_input_hash` |
 | 13 | [`on_demand_backfill`](../workers/on_demand_backfill/README.md) | Orchestrator (Ethos + ERC-8183 + Virtual ACP + Olas Mech) | 0/6/12/18 | `needs_history_fetch` → scores TTL 15d → `needs_satellite_backfill` (8183 + Virtual ACP + Olas Mech) | per-step claim/complete | `ethos.*` + `official_scores` + `bsc_erc_8183` / `virtual_acp` / `olas_mech` satellites |
 | 14 | [`erc8257_tools_import`](../workers/erc8257_tools_import/README.md) | Reference | 04:00 daily | agenttoolindex REST (active+deregistered dump) | `erc_8257.tools_upsert` + `sync_state` watermark | `erc_8257.tools` (full catalog) |
+| 15 | [`agent_endpoint_liveness`](../workers/agent_endpoint_liveness/README.md) | Claim (`agent_endpoint_health`) | 0/6/12/18 | HTTP(s) locators from `agent_metadata_services` due on 15d clock | `agent_endpoint_health_sync` / `_claim` / `_complete_batch` | `erc_8004.agent_endpoint_health` + view `agent_endpoint_status` |
 
 Soft runtime budget for claim / enrich jobs: **`MAX_RUNTIME_SECONDS=19800`** (~5.5h). Empty queue → exit 0; next cron still fires.
 
@@ -246,6 +249,26 @@ GET /api/stats → short-circuit if synced_at unchanged →
 | Workflow | `erc8257-tools-import.yml` (`0 4 * * *` UTC) |
 | Schema | `20260815010000`…`10200_erc_8257_*` |
 | Prod snapshot | 622 tools; 408 active Base+Eth; 207 linked; GHA [31860915582](https://github.com/GlobalScoreAgent/gsa-workers/actions/runs/31860915582) |
+
+### 15. Agent endpoint HTTP liveness (15d)
+
+**Live after schema deploy.** Claim worker on `erc_8004.agent_endpoint_health` (not on `agent_metadata_services` — profile process DELETE+INSERT).
+
+```
+sync HTTP locators → claim due (SKIP LOCKED) → coalesce URL → HEAD → GET → complete_batch (+15d)
+```
+
+Empty queue → `queue empty` → exit 0. Slot cap 5.5h. Cron `0 0,6,12,18 * * *`.
+
+Not ERC-8004 Reputation `LIVENESS` feedback. HEAD/GET ≠ MCP/A2A health. HUMI/WAMI not updated.
+
+| Item | Detail |
+|---|---|
+| Source | `agent_metadata_services.endpoint` via `normalize_http_endpoint` |
+| PK | `(agent_id, endpoint_normalized)` |
+| Workflow | `agent-endpoint-liveness.yml` |
+| Schema | `20260824010000_agent_endpoint_health.sql` |
+| View | `erc_8004.agent_endpoint_status` (`live`/`degraded`/`down`/`unknown`) |
 
 ## Secrets cheat sheet
 

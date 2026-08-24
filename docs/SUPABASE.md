@@ -43,6 +43,9 @@ Schema migrations and snapshot/upsert SQL live in the sibling repo **`gsa-supaba
 | `llm.process` / `llm.llm_provider` / `llm.models` / `llm.procees_llm_providers` / `llm.models_requests` | LLM config + daily request counters |
 | `erc_8257.tools` | ERC-8257 tool catalog mirror (agenttoolindex); PK `(chain_id, tool_id)`; FK `creator_wallet_id` |
 | `erc_8257.sync_state` | Watermark `source_synced_at` for agenttoolindex sync short-circuit |
+| `erc_8004.agent_metadata_services` | Parsed metadata services (`endpoint`, `internal_type`). Profile process DELETE+INSERT. |
+| `erc_8004.agent_endpoint_health` | 15d HTTP census queue + last result. PK `(agent_id, endpoint_normalized)`. |
+| `erc_8004.agent_endpoint_status` | View: per-agent `live` / `degraded` / `down` / `unknown` |
 
 ## Per-worker column map
 
@@ -235,6 +238,7 @@ Canonical SQL / migrations: `gsa-supabase-schema/supabase/migrations/` and `supa
 | token portfolio discovery | `wallets.wallet_token_positions_insert(p_wallet_id, p_chain_id, p_rows jsonb)` | `wallets.wallet_token_positions` (INSERT … ON CONFLICT DO NOTHING) |
 | LP positions discovery | `wallets.wallet_lp_positions_upsert(p_wallet_id, p_chain_id, p_rows jsonb)` | `wallets.wallet_lp_positions` (DELETE+INSERT replace per wallet+chain; stamps `calculated_at`) |
 | activity flows 15d | `wallets.wallet_activity_transfers_insert(p_rows jsonb)` | Staging `wallets.wallet_activity_transfers` (INSERT … ON CONFLICT DO NOTHING) |
+| endpoint liveness 15d | `agent_endpoint_health_sync` / `_claim` / `_complete` / `_complete_batch` | `erc_8004.agent_endpoint_health` |
 
 Dune upserts: JSON arrays; empty array raises. Worker sends **chunks** (default 5000). Scripts: `wallets_cex_addresses_upsert.sql`, `wallets_dune_reference_tables.sql`. Docs: `gsa-supabase-schema/supabase/docs/wallets-dune-reference-tables.md`.
 
@@ -694,14 +698,34 @@ WHERE chain_id IN (1, 8453)
   AND status = 'active';
 ```
 
+### Endpoint liveness 15d
+
+```sql
+SELECT erc_8004.agent_endpoint_health_sync();
+
+SELECT
+  count(*) FILTER (WHERE is_active) AS active,
+  count(*) FILTER (
+    WHERE is_active AND next_eligible_at <= now()
+      AND (claimed_at IS NULL OR claimed_at < now() - interval '2 hours')
+  ) AS due,
+  count(*) FILTER (WHERE is_active AND is_reachable IS TRUE) AS reachable
+FROM erc_8004.agent_endpoint_health;
+
+SELECT status, count(*) FROM erc_8004.agent_endpoint_status GROUP BY 1;
+```
+
+Schema: sibling `gsa-supabase-schema` → `supabase/docs/agent-endpoint-health.md`.
+
 ## Related docs
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — GHA pipeline and state machine
 - [OPS.md](./OPS.md) — stuck wallets, URI ops, logs
-- [PROCESSES.md](./PROCESSES.md) — live catalog (#10–11 URI ingest, **#13 on-demand backfill**, **#14 ERC-8257**)
+- [PROCESSES.md](./PROCESSES.md) — live catalog (#10–11 URI ingest, **#13 on-demand backfill**, **#14 ERC-8257**, **#15 endpoint liveness**)
 - Worker READMEs under `workers/*/README.md`
 - Ethos linking (schema): sibling `gsa-supabase-schema` → `supabase/docs/ethos-erc8004-linking.md`
 - ERC-8183 catch-up: `supabase/docs/bsc-erc-8183-import.md` (Fase 3 = `on_demand_backfill`)
 - Virtual ACP catch-up: `supabase/docs/virtual-acp-import.md` (consumer = `on_demand_backfill` / `virtual_acp_satellites`)
 - Olas Mech catch-up: `supabase/docs/olas-mech-import.md` (consumer = `on_demand_backfill` / `olas_mech_satellites`)
 - ERC-8257 tools: `supabase/docs/erc-8257-tools-import.md`
+- Endpoint HTTP census: `supabase/docs/agent-endpoint-health.md`

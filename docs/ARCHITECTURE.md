@@ -84,13 +84,15 @@ stateDiagram-v2
 | `agent_uri_resolve` | `agent-uri-resolve.yml` | `agent-uri-resolve` | 1 runner (00:00 / 12:00) |
 | `agent_uri_reprocess` | `agent-uri-reprocess.yml` | `agent-uri-reprocess` | 1 runner (06:00 / 18:00) |
 | `ai_agent_classifier` | `ai-agent-classifier.yml` | `ai-agent-classifier` | 1 runner (0/6/12/18) |
+| `agent_endpoint_liveness` | `agent-endpoint-liveness.yml` | `agent-endpoint-liveness` | 1 runner (0/6/12/18); empty queue exit 0 |
 
 Claim wallet workers schedule: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
 Dune queries import schedule: `0 0 18 * *` UTC + `workflow_dispatch` (18th monthly, after typical Dune billing reset ~17th; 4 tasks per run).  
 Token prices import schedule: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
 URI resolve: `0 0,12 * * *`; URI reprocess: `0 6,18 * * *` (split cadence by design).  
 AI classifier: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
-Activity flows 15d: `0 0 1,15 * *` + `0 */4 * * *` UTC + `workflow_dispatch`.
+Activity flows 15d: `0 0 1,15 * *` + `0 */4 * * *` UTC + `workflow_dispatch`.  
+Endpoint liveness 15d: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.
 
 ### What each worker does
 
@@ -109,6 +111,7 @@ Activity flows 15d: `0 0 1,15 * *` + `0 */4 * * *` UTC + `workflow_dispatch`.
 | agent URI resolve | agents / on-chain / external feedbacks pending | Resolve/materialize → `uri_documents` + `agent_manifest` |
 | agent URI reprocess | download errors (max 3) + off-chain docs &gt;15d | Retry + refresh; `is_processed` only if document changed; failed refresh still stamps `fetched_at` |
 | AI agent classifier | `does_need_ai_category_process` | LLM → `ai_category_*` on `web_dashboard.agents`; rotate `llm.models` by daily cap |
+| endpoint liveness 15d | HTTP(s) locators due on `next_eligible_at` | HEAD/GET → `agent_endpoint_health`; view `agent_endpoint_status` |
 
 ## Token contracts discovery
 
