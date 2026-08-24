@@ -138,7 +138,7 @@ async def fetch_for_row(
         return rows
 
     if meta["group"] == "bsc":
-        vendor = bsc_provider(now.day)
+        vendor = bsc_provider(now.day, now.date())
         if vendor == "alchemy":
             if alchemy_k2 is None:
                 raise RuntimeError("ALCHEMY_ACTIVITY_KEY_2 required for BSC first cut")
@@ -210,6 +210,7 @@ async def run_job() -> int:
 
     db = Database(dsn)
     db.connect()
+    now_utc = datetime.now(timezone.utc)
     logger.info(
         "Started claimed_by=%s group=%s evm_ids=%s claim_batch=%s max_runtime=%ss",
         claimed_by,
@@ -218,6 +219,12 @@ async def run_job() -> int:
         claim_batch_size,
         max_runtime_seconds,
     )
+    if group == "bsc":
+        logger.info(
+            "BSC vendor=%s utc_date=%s (Alchemy through 2026-08-31 UTC)",
+            bsc_provider(now_utc.day, now_utc.date()),
+            now_utc.date().isoformat(),
+        )
 
     start = time.monotonic()
     processed = 0

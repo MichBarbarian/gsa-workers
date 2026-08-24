@@ -12,7 +12,7 @@
 |--------------------------|--------|--------|
 | `etherscan` | ETH, Arb, Polygon, Celo | Etherscan V2 Free |
 | `alchemy_k1` | Base, Gnosis | Alchemy Transfers (`ALCHEMY_ACTIVITY_KEY_1`). Gnosis timestamps via `eth_getBlockByNumber` + `block_cache` |
-| `bsc` | BSC | Day **1** cut: Alchemy `ALCHEMY_ACTIVITY_KEY_2`. Day **15** cut: Ankr |
+| `bsc` | BSC | Day **1** cut: Alchemy `ALCHEMY_ACTIVITY_KEY_2`. Day **15** cut: Ankr (`pageSize=1000`). **Through 2026-08-31 UTC** remaining day-15 BSC drains on Alchemy key_2 (Ankr credits exhausted). |
 | `xlayer` | X Layer | OKX **Data API** (not Market API) |
 
 ## Claim
@@ -28,8 +28,8 @@ Create a **dedicated Alchemy Free app** for BSC (`ALCHEMY_ACTIVITY_KEY_2`). Do *
 | `SUPABASE_DB_URL` | Postgres |
 | `ETHERSCAN_API_KEY` | ETH/Arb/Polygon/Celo |
 | `ALCHEMY_ACTIVITY_KEY_1` | Base + Gnosis |
-| `ALCHEMY_ACTIVITY_KEY_2` | BSC day-1 cut |
-| `ANKR_API_KEY` | BSC day-15 cut |
+| `ALCHEMY_ACTIVITY_KEY_2` | BSC day-1 cut; also leftover day-15 BSC through 2026-08-31 UTC |
+| `ANKR_API_KEY` | BSC day-15 cut (from 2026-09-01 UTC) |
 | `OKX_API_KEY` / `OKX_SECRET_KEY` / `OKX_PASSPHRASE` | X Layer Data API |
 
 ## Local

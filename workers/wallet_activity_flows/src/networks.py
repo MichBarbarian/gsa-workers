@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
 from typing import Any
 
 # Keyed by EVM chain_id.
@@ -73,9 +74,20 @@ GROUP_EVM_IDS: dict[str, tuple[int, ...]] = {
 
 LOOKBACK_DAYS = 15
 
+# First calendar month in prod: Alchemy key_2 barely used on the day-1 cut.
+# Ankr Freemium 200M burned 2026-08-24 (pageSize 100). Drain remaining BSC with
+# Alchemy until 2026-09-01 00:00 UTC, then resume day>=15 → Ankr.
+ALCHEMY_BSC_THROUGH = date(2026, 9, 1)
 
-def bsc_provider(utc_day: int) -> str:
-    """Day-1 cut (and drain while day < 15): Alchemy key_2. Day-15 cut onward: Ankr."""
+
+def bsc_provider(utc_day: int, utc_date: date | None = None) -> str:
+    """Day-1 cut (and drain while day < 15): Alchemy key_2. Day-15 cut onward: Ankr.
+
+    Through 2026-08-31 UTC, always Alchemy so the first 15d cut can finish.
+    """
+    today = utc_date or datetime.now(timezone.utc).date()
+    if today < ALCHEMY_BSC_THROUGH:
+        return "alchemy"
     if utc_day < 15:
         return "alchemy"
     return "ankr"

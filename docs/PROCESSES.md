@@ -144,7 +144,7 @@ claim (no Dormant_*, valid agent) →
 
 | Item | Detail |
 |---|---|
-| Groups | `etherscan` (ETH/Arb/Polygon/Celo); `alchemy_k1` (Base/Gnosis); `bsc` (Alchemy key_2 on day-1 cut, Ankr on day-15 cut); `xlayer` (OKX Data API) |
+| Groups | `etherscan` (ETH/Arb/Polygon/Celo); `alchemy_k1` (Base/Gnosis); `bsc` (Alchemy key_2 on day-1 cut, Ankr on day-15 cut with `pageSize=1000`; **through 2026-08-31 UTC** leftover day-15 BSC uses Alchemy key_2); `xlayer` (OKX Data API) |
 | Window | Last ~15 days; native + ERC-20/721/1155 |
 | Empty wallet | Completes OK with no INSERT |
 | Gnosis timestamps | Worker `eth_getBlockByNumber` + `erc_8004.block_cache` (Alchemy without `withMetadata`) |

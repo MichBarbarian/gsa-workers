@@ -14,6 +14,9 @@ from canonical import parse_int, row_dict, synth_unique_id
 logger = logging.getLogger("wallet_activity_flows")
 
 MIN_INTERVAL_S = 2.05  # ~30 req/min
+# Ankr max is 10_000; 1000 covers ~15d for almost all wallets (avg ~129 rows)
+# without the extra pages that burned Freemium credits at pageSize=100.
+PAGE_SIZE = 1000
 
 
 class AnkrClient:
@@ -66,7 +69,7 @@ class AnkrClient:
                     "fromTimestamp": from_ts,
                     "toTimestamp": to_ts,
                     "descOrder": True,
-                    "pageSize": 100,
+                    "pageSize": PAGE_SIZE,
                 },
                 mapper=lambda item: _map_native(
                     item,
@@ -87,7 +90,7 @@ class AnkrClient:
                     "fromTimestamp": from_ts,
                     "toTimestamp": to_ts,
                     "descOrder": True,
-                    "pageSize": 100,
+                    "pageSize": PAGE_SIZE,
                 },
                 mapper=lambda item: _map_token(
                     item,
@@ -109,7 +112,7 @@ class AnkrClient:
                     "fromTimestamp": from_ts,
                     "toTimestamp": to_ts,
                     "descOrder": True,
-                    "pageSize": 100,
+                    "pageSize": PAGE_SIZE,
                 },
                 mapper=lambda item: _map_nft(
                     item,

@@ -127,7 +127,7 @@ SELECT
 FROM erc_8004.wallet_transactions;
 ```
 
-Control until the 15th cut: `dormant` should rise and `non_dormant` fall as `wallet_tx_rollup` reclassifies. `due_now` stays 0 while the queue is parked (`next_eligible_at = 2026-08-15 00:00 UTC`) and GHA `Wallet activity flows 15d` is `disabled_manually`. Baseline 2026-08-13: seeded 294 948 / dormant 77 159 / non_dormant 217 789. Same snapshot is required in skill `gsa-worker-health`.
+`dormant` rises and `non_dormant` falls as `wallet_tx_rollup` reclassifies — expected. Baseline 2026-08-13: seeded 294 948 / dormant 77 159 / non_dormant 217 789. Same snapshot is required in skill `gsa-worker-health`. Through 2026-08-31 UTC leftover BSC due rows drain via Alchemy key_2 (Ankr Freemium exhausted 2026-08-24).
 
 Staging table: `wallets.wallet_activity_transfers` via `wallets.wallet_activity_transfers_insert`. PK `(wallet_id, chain_id, unique_id)`. `chain_id` is `erc_8004.chains.id`. Migration: `20260813010000_wallet_activity_transfers.sql`. Schema doc: `gsa-supabase-schema/supabase/docs/wallet-activity-transfers.md`.
 
