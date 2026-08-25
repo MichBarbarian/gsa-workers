@@ -6,7 +6,7 @@ Orquestador GHA multi-step: catch-up on-demand para dominios con flag `needs_*`.
 
 | Step | Acción | Empty → |
 |------|--------|---------|
-| `ethos_history` | `claim_history_fetch` → Goldsky Ethos → upsert señales → complete | skip |
+| `ethos_history` | `claim_history_fetch` → Goldsky slim (no signal entities) → complete | skip |
 | `ethos_scores` | `list_score_candidates` → Ethos API → `upsert_official_scores` | skip |
 | `erc8183_satellites` | `claim_satellite_backfill` → Goldsky ERC-8183 → upsert satélites → complete (incluso 0 eventos) | skip |
 | `virtual_acp_satellites` | `virtual_acp.claim_satellite_backfill` → Goldsky Virtual ACP → upsert → complete (incluso 0 eventos) | skip |
@@ -33,7 +33,8 @@ uv run python job.py
 Reemplaza `ethos-enrich` (deprecated).
 
 Schema claims:
-- Ethos: `20260806010000_ethos_enrich_worker.sql`
+- Ethos history/scores: `20260806010000_ethos_enrich_worker.sql`
+- Ethos reviews API (dedicated worker, not this orchestrator): `20260825020000_ethos_reviews_api_worker.sql`
 - ERC-8183: `20260807010000_bsc_erc_8183_satellite_backfill_claim.sql`
 - Virtual ACP: `20260807140000_virtual_acp_satellite_backfill_claim.sql`
 - Olas Mech: `20260807154000_olas_mech_satellite_backfill_claim.sql`

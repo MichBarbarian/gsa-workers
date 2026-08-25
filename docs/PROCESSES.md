@@ -28,6 +28,9 @@ flowchart TB
     lpRefresh[wallet_lp_positions_refresh_15d]
     manifestConsume[agent_manifest_consume]
   end
+  subgraph ethosApi [Ethos_API]
+    reviewsApi[ethos_reviews_api]
+  end
   subgraph uriIngest [URI_ingest]
     uriResolve[agent_uri_resolve]
     uriReprocess[agent_uri_reprocess]
@@ -60,6 +63,7 @@ flowchart TB
   uriReprocess --> am
   manifestConsume -.-> am
   classifier --> dashAgents[web_dashboard.agents]
+  reviewsApi --> ethosReviews[ethos.reviews]
 ```
 
 ## Live processes
@@ -81,6 +85,7 @@ flowchart TB
 | 13 | [`on_demand_backfill`](../workers/on_demand_backfill/README.md) | Orchestrator (Ethos + ERC-8183 + Virtual ACP + Olas Mech) | 0/6/12/18 | `needs_history_fetch` → scores TTL 15d → `needs_satellite_backfill` (8183 + Virtual ACP + Olas Mech) | per-step claim/complete | `ethos.*` + `official_scores` + `bsc_erc_8183` / `virtual_acp` / `olas_mech` satellites |
 | 14 | [`erc8257_tools_import`](../workers/erc8257_tools_import/README.md) | Reference | 04:00 daily | agenttoolindex REST (active+deregistered dump) | `erc_8257.tools_upsert` + `sync_state` watermark | `erc_8257.tools` (full catalog) |
 | 15 | [`agent_endpoint_liveness`](../workers/agent_endpoint_liveness/README.md) | Claim (`agent_endpoint_health`) | 0/6/12/18 | HTTP(s) locators from `agent_metadata_services` due on 15d clock | `agent_endpoint_health_sync` / `_claim` / `_complete_batch` | `erc_8004.agent_endpoint_health` + view `agent_endpoint_status` |
+| 16 | [`ethos_reviews_api`](../workers/ethos_reviews_api/README.md) | Claim (`ethos.profiles`) | 0/6/12/18 | GSA-linked Claimed + `reviews_next_eligible_at` | `claim_reviews_fetch` / `complete_reviews_fetch` | `ethos.reviews` |
 
 Soft runtime budget for claim / enrich jobs: **`MAX_RUNTIME_SECONDS=19800`** (~5.5h). Empty queue → exit 0; next cron still fires.
 
@@ -215,7 +220,7 @@ ethos_history → ethos_scores → erc8183_satellites → virtual_acp_satellites
 
 | Step | Queue / action |
 |---|---|
-| `ethos_history` | `needs_history_fetch` → Goldsky Ethos → upsert → `complete_history_fetch` |
+| `ethos_history` | `needs_history_fetch` → Goldsky slim (no signal entities) → `complete_history_fetch` (drena cola; reviews van al worker #16) |
 | `ethos_scores` | linked wallets due TTL **15d** → Ethos API → `upsert_official_scores` |
 | `erc8183_satellites` | `bsc_erc_8183.needs_satellite_backfill` → Goldsky ×4 → upsert → complete (even if 0 events) |
 | `virtual_acp_satellites` | `virtual_acp.needs_satellite_backfill` → Goldsky ×4 → upsert → complete (even if 0 events) |
@@ -269,6 +274,27 @@ Not ERC-8004 Reputation `LIVENESS` feedback. HEAD/GET ≠ MCP/A2A health. HUMI/W
 | Workflow | `agent-endpoint-liveness.yml` |
 | Schema | `20260824010000_agent_endpoint_health.sql` |
 | View | `erc_8004.agent_endpoint_status` (`live`/`degraded`/`down`/`unknown`) |
+
+### 16. Ethos reviews API
+
+**Live after schema deploy.** Dedicated GHA (not a step of `on_demand_backfill`). Ethos v2 activities → `ethos.reviews` for GSA-linked Claimed profiles.
+
+```
+claim_reviews_fetch → POST received + given (filter review / review-archived)
+  → upsert ethos.reviews → complete_reviews_fetch (+1d)
+```
+
+`reviews_fetched_at IS NULL` → full paginate. Else incremental (stop at watermark). Late-link trigger sets `reviews_next_eligible_at = now()`.
+
+| Item | Detail |
+|---|---|
+| API | `https://api.ethos.network/api/v2` · header `X-Ethos-Client: gsa-ethos-reviews@1.0` |
+| PK upsert | `graph_id = ethos-api:review:{review_id}` |
+| Workflow | `ethos-reviews-api.yml` |
+| Schema | `20260825020000_ethos_reviews_api_worker.sql` |
+| Out of v1 | vouches/slashes/markets API; reactivate `ethos_signals` |
+
+Worker README: [`ethos_reviews_api`](../workers/ethos_reviews_api/README.md).
 
 ## Secrets cheat sheet
 

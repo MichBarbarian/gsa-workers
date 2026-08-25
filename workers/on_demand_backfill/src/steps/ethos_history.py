@@ -1,4 +1,8 @@
-"""Step: Ethos Proceso 2 — claim needs_history_fetch → Goldsky → upsert → complete."""
+"""Step: Ethos Proceso 2 — claim needs_history_fetch → skip Goldsky signals → complete.
+
+Goldsky 1.1.0 is Profile+Address only. Reviews are filled by ethos_reviews_api.
+This step drains the late-link history queue without GraphQL signal fetches.
+"""
 
 from __future__ import annotations
 

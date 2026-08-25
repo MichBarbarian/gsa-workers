@@ -85,6 +85,7 @@ stateDiagram-v2
 | `agent_uri_reprocess` | `agent-uri-reprocess.yml` | `agent-uri-reprocess` | 1 runner (06:00 / 18:00) |
 | `ai_agent_classifier` | `ai-agent-classifier.yml` | `ai-agent-classifier` | 1 runner (0/6/12/18) |
 | `agent_endpoint_liveness` | `agent-endpoint-liveness.yml` | `agent-endpoint-liveness` | 1 runner (0/6/12/18); empty queue exit 0 |
+| `ethos_reviews_api` | `ethos-reviews-api.yml` | `ethos-reviews-api` | 1 runner (0/6/12/18); empty queue exit 0 |
 
 Claim wallet workers schedule: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
 Dune queries import schedule: `0 0 18 * *` UTC + `workflow_dispatch` (18th monthly, after typical Dune billing reset ~17th; 4 tasks per run).  
@@ -92,7 +93,8 @@ Token prices import schedule: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.
 URI resolve: `0 0,12 * * *`; URI reprocess: `0 6,18 * * *` (split cadence by design).  
 AI classifier: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
 Activity flows 15d: `0 0 1,15 * *` + `0 */4 * * *` UTC + `workflow_dispatch`.  
-Endpoint liveness 15d: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.
+Endpoint liveness 15d: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
+Ethos reviews API: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.
 
 ### What each worker does
 
@@ -112,6 +114,7 @@ Endpoint liveness 15d: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.
 | agent URI reprocess | download errors (max 3) + off-chain docs &gt;15d | Retry + refresh; `is_processed` only if document changed; failed refresh still stamps `fetched_at` |
 | AI agent classifier | `does_need_ai_category_process` | LLM → `ai_category_*` on `web_dashboard.agents`; rotate `llm.models` by daily cap |
 | endpoint liveness 15d | HTTP(s) locators due on `next_eligible_at` | HEAD/GET → `agent_endpoint_health`; view `agent_endpoint_status` |
+| Ethos reviews API | GSA-linked Claimed + `reviews_next_eligible_at` | Ethos v2 given/received → `ethos.reviews` |
 
 ## Token contracts discovery
 
@@ -301,6 +304,7 @@ Origin also has `scripts/check_pending.py` and `scripts/compare_smoke.py`. `wall
 | agent URI reprocess | 4 | 20 | n/a |
 | AI agent classifier | 1 | 20 | n/a |
 | on-demand backfill | Ethos 3 / satellites 5 | Ethos 10 / satellites 100 | 7200 |
+| Ethos reviews API | 3 | 10 | 7200 |
 
 Secrets: `SUPABASE_DB_URL` (required), `ALCHEMY_KEY` (balance/nonce), `ALCHEMY_FREE_KEY` (contracts / portfolio / LP), `ETHERSCAN_API_KEY` / `ALCHEMY_ACTIVITY_KEY_1` / `ALCHEMY_ACTIVITY_KEY_2` / `ANKR_API_KEY` / OKX HMAC (`OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE`) for activity flows (`ALCHEMY_ACTIVITY_KEY_2` is a dedicated Free app — do not reuse `ALCHEMY_FREE_KEY`), `DUNE_KEY` (dune queries), `COINGECKO_KEY` (token prices), `PINATA_GATEWAY` (URI IPFS last fallback; Gateway Key, not API JWT) / `SCRAPING_ANT_KEY` (URI HTTP last fallback), `GROQ` (AI classifier). Daily sets `WORKER_ID` from the matrix.
 
@@ -313,7 +317,7 @@ ethos_history → ethos_scores → erc8183_satellites → virtual_acp_satellites
 ```
 
 - Empty step queue → skip; step error → continue; global `MAX_RUNTIME_SECONDS`.
-- Ethos: `claim_history_fetch` / `complete` + `list_score_candidates` / `upsert_official_scores`.
+- Ethos: `claim_history_fetch` / `complete` + `list_score_candidates` / `upsert_official_scores`. Reviews **no** salen de Goldsky: worker dedicado `ethos_reviews_api`.
 - ERC-8183: `bsc_erc_8183.claim_satellite_backfill` / `complete` → Goldsky ×4 → upsert.
 - Virtual ACP: `virtual_acp.claim_satellite_backfill` / `complete` → Goldsky ×4 → upsert (no `contract_address`).
 - Olas Mech: `olas_mech.claim_satellite_backfill` / `complete` → Autonolas Base/Gnosis → upsert requests/deliveries (`address` + `chain_id`).

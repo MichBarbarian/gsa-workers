@@ -46,6 +46,8 @@ Schema migrations and snapshot/upsert SQL live in the sibling repo **`gsa-supaba
 | `erc_8004.agent_metadata_services` | Parsed metadata services (`endpoint`, `internal_type`). Profile process DELETE+INSERT. |
 | `erc_8004.agent_endpoint_health` | 15d HTTP census queue + last result. PK `(agent_id, endpoint_normalized)`. |
 | `erc_8004.agent_endpoint_status` | View: per-agent `live` / `degraded` / `down` / `unknown` |
+| `ethos.profiles` | Ethos identity + reviews API watermark (`reviews_fetched_at` / `reviews_next_eligible_at`) |
+| `ethos.reviews` | Review rows for HUMI Ethos signals; filled by `ethos_reviews_api` (not Goldsky) |
 
 ## Per-worker column map
 
@@ -54,6 +56,17 @@ Schema migrations and snapshot/upsert SQL live in the sibling repo **`gsa-supaba
 | **daily** | `is_valid_import_current_nonce_and_balance_daily` | `import_nonce_and_balance_daily_next_eligible_at` | `import_current_nonce_and_balance_daily_json` | `import_nonce_and_balance_daily_last_status` | `import_nonce_and_balance_daily_at` |
 | **monthly** | `is_valid_import_current_nonce_and_balance_monthly` | `import_nonce_and_balance_monthly_next_eligible_at` | `import_current_nonce_and_balance_monthly_json` | `import_nonce_and_balance_monthly_last_status` | `import_nonce_and_balance_monthly_at` |
 | **origin** | `is_valid_import_current_nonce_and_balance_monthly` | `import_wallet_history_next_eligible_at` | `import_wallet_history_data` | `import_wallet_history_status` | `import_wallet_history_at` |
+
+### Ethos reviews API (`ethos.profiles`)
+
+| Column | Role |
+|---|---|
+| `reviews_fetched_at` | Last successful API fetch. `NULL` = full paginate |
+| `reviews_next_eligible_at` | Due clock. `NULL` or `<= now()` = eligible. Success → `+1 day` |
+| `reviews_claimed_at` / `reviews_claimed_by` | Soft lock (stale 2h) |
+| `reviews_last_status` | `ok` \| `error` |
+
+Universe: Claimed `profile_addresses.wallet_id IS NOT NULL`. RPCs `ethos.claim_reviews_fetch` / `complete_reviews_fetch`. Upsert destination `ethos.reviews` (`graph_id = ethos-api:review:{id}`).
 
 Daily also uses claim metadata:
 
@@ -671,7 +684,8 @@ SELECT jsonb_build_object(
 
 | Step | Queue | Source GraphQL |
 |------|-------|----------------|
-| `ethos_history` | `needs_history_fetch` | Goldsky Ethos |
+| `ethos_history` | `needs_history_fetch` | Goldsky slim (no reviews) |
+| `ethos_reviews_api` | `reviews_next_eligible_at` | Ethos API v2 activities |
 | `ethos_scores` | `list_score_candidates` | Ethos API (no subgraph) |
 | `erc8183_satellites` | `bsc_erc_8183.jobs.needs_satellite_backfill` | Goldsky ERC-8183 BSC |
 | `virtual_acp_satellites` | `virtual_acp.jobs.needs_satellite_backfill` | Goldsky Virtual ACP Base |
@@ -717,11 +731,33 @@ SELECT status, count(*) FROM erc_8004.agent_endpoint_status GROUP BY 1;
 
 Schema: sibling `gsa-supabase-schema` → `supabase/docs/agent-endpoint-health.md`.
 
+## Monitoring — Ethos reviews API (#16)
+
+```sql
+SELECT
+  count(*) FILTER (
+    WHERE reviews_next_eligible_at IS NULL OR reviews_next_eligible_at <= now()
+  ) AS due_clock,
+  count(*) FILTER (WHERE reviews_fetched_at IS NOT NULL) AS fetched,
+  count(*) FILTER (WHERE reviews_last_status = 'error') AS errors
+FROM ethos.profiles p
+WHERE EXISTS (
+  SELECT 1 FROM ethos.profile_addresses pa
+  WHERE pa.profile_id = p.profile_id
+    AND pa.wallet_id IS NOT NULL
+    AND lower(pa.status) = 'claimed'
+);
+
+SELECT count(*) FROM ethos.reviews;
+```
+
+Schema: sibling `gsa-supabase-schema` → `supabase/docs/ethos-reviews-api.md`.
+
 ## Related docs
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — GHA pipeline and state machine
 - [OPS.md](./OPS.md) — stuck wallets, URI ops, logs
-- [PROCESSES.md](./PROCESSES.md) — live catalog (#10–11 URI ingest, **#13 on-demand backfill**, **#14 ERC-8257**, **#15 endpoint liveness**)
+- [PROCESSES.md](./PROCESSES.md) — live catalog (#10–11 URI ingest, **#13 on-demand backfill**, **#14 ERC-8257**, **#15 endpoint liveness**, **#16 Ethos reviews API**)
 - Worker READMEs under `workers/*/README.md`
 - Ethos linking (schema): sibling `gsa-supabase-schema` → `supabase/docs/ethos-erc8004-linking.md`
 - ERC-8183 catch-up: `supabase/docs/bsc-erc-8183-import.md` (Fase 3 = `on_demand_backfill`)
@@ -729,3 +765,4 @@ Schema: sibling `gsa-supabase-schema` → `supabase/docs/agent-endpoint-health.m
 - Olas Mech catch-up: `supabase/docs/olas-mech-import.md` (consumer = `on_demand_backfill` / `olas_mech_satellites`)
 - ERC-8257 tools: `supabase/docs/erc-8257-tools-import.md`
 - Endpoint HTTP census: `supabase/docs/agent-endpoint-health.md`
+- Ethos reviews API: `supabase/docs/ethos-reviews-api.md`

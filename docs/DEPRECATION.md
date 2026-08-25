@@ -9,6 +9,8 @@
 
 Do **not** re-add a dedicated Ethos enrich cron. Steps `ethos_history` + `ethos_scores` run inside the orchestrator.
 
+The dedicated worker `ethos_reviews_api` (`ethos-reviews-api.yml`) is **not** that enrich job: it only fills `ethos.reviews` via Ethos API v2 (ADR 2026-08-25) after Goldsky dropped review entities.
+
 ## pg_cron (do not re-enable)
 
 These jobs were replaced by **inline** `wallet_apply_*_snapshot` calls in the GitHub Actions workers. Functions may remain as no-op stubs; cron should stay **disabled**.

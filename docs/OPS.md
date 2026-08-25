@@ -36,6 +36,17 @@ Adjust column names for monthly / origin ([SUPABASE.md](./SUPABASE.md)).
 | `Time budget reached` | Soft stop (`MAX_RUNTIME_SECONDS`); exit 0 |
 | `Critical job failure` | Unexpected error outside the DB continue path |
 
+### Ethos reviews API
+
+| Log line | Meaning |
+|---|---|
+| `Claimed batch size=` | Claim OK; Ethos activities about to run |
+| `Done profile_id=` | Upsert + complete for that profile |
+| `queue empty` | No GSA-linked Claimed profiles due; exit 0 |
+| `Time budget reached` | Soft stop; remaining stay claimed until stale 2h |
+
+Schema RPCs: `ethos.claim_reviews_fetch` / `complete_reviews_fetch`. Do not confuse with `ethos_scores` (credibility, TTL 15d) inside `on_demand_backfill`.
+
 ### Dune queries import
 
 | Log line | Meaning |
@@ -167,9 +178,9 @@ Deploy order when both change: **schema → worker → workflow_dispatch**.
 
 ## Related
 
-- [PROCESSES.md](./PROCESSES.md) — live pipeline catalog (#9–10 URI)
+- [PROCESSES.md](./PROCESSES.md) — live pipeline catalog (#13 on-demand, **#16 Ethos reviews API**)
 - [PENDING_LP_POSITIONS.md](./PENDING_LP_POSITIONS.md) — LP 15-day refresh (discovery already live)
 - [SUPABASE.md](./SUPABASE.md) — monitoring and backfill SQL
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — pipeline and budgets
 - [DEPRECATION.md](./DEPRECATION.md) — do not re-enable old crons / Edge URI
-- Workers: [`wallet_lp_positions_discovery`](../workers/wallet_lp_positions_discovery/README.md), [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md), [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md)
+- Workers: [`wallet_lp_positions_discovery`](../workers/wallet_lp_positions_discovery/README.md), [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md), [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md), [`ethos_reviews_api`](../workers/ethos_reviews_api/README.md)

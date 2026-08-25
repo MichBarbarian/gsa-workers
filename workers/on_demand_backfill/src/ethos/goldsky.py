@@ -16,87 +16,10 @@ DEFAULT_GOLDSKY_URL = (
 
 PAGE_SIZE = 1000
 
-# entity_key -> (root_query, where_clause_template with {pid}, field selection)
-# Filters match normalize link criteria (author and/or subject / profile / owner).
-ENTITY_QUERIES: dict[str, tuple[str, str, str]] = {
-    "attestations": (
-        "ethosAttestations",
-        'profile_: {{ profileId: "{pid}" }}',
-        """
-        id attestationId service account evidence createdAt archived
-        profile { id profileId }
-        """,
-    ),
-    "reviews": (
-        "ethosReviews",
-        'or: [{{ authorProfile_: {{ profileId: "{pid}" }} }}, {{ subjectProfile_: {{ profileId: "{pid}" }} }}]',
-        """
-        id reviewId score author subject attestationHash comment metadata createdAt archived
-        authorProfile { id profileId }
-        subjectProfile { id profileId }
-        """,
-    ),
-    "vouches": (
-        "ethosVouches",
-        'or: [{{ authorProfile_: {{ profileId: "{pid}" }} }}, {{ subjectProfile_: {{ profileId: "{pid}" }} }}]',
-        """
-        id vouchId balance archived unhealthy vouchedAt unvouchedAt comment metadata
-        authorProfile { id profileId }
-        subjectProfile { id profileId }
-        """,
-    ),
-    "slashes": (
-        "ethosSlashes",
-        'or: [{{ authorProfile_: {{ profileId: "{pid}" }} }}, {{ subjectProfile_: {{ profileId: "{pid}" }} }}]',
-        """
-        id slashId amount createdAt archived slashType comment metadata subject attestationHash
-        authorProfile { id profileId }
-        subjectProfile { id profileId }
-        """,
-    ),
-    "reputation_markets": (
-        "ethosReputationMarkets",
-        'profileId: "{pid}"',
-        """
-        id profileId graduated voteTrust voteDistrust trustPrice distrustPrice
-        liquidity basePrice createdAt updatedAt
-        profile { id profileId }
-        """,
-    ),
-    "market_trades": (
-        "ethosMarketTrades",
-        'profileId: "{pid}"',
-        """
-        id profileId trader isPositive isBuy amount funds timestamp txHash
-        market { id profileId }
-        """,
-    ),
-    "broker_posts": (
-        "ethosBrokerPosts",
-        'authorProfile_: {{ profileId: "{pid}" }}',
-        """
-        id postId authorProfileId type title description cost tags level
-        createdAt updatedAt txHash
-        authorProfile { id profileId }
-        """,
-    ),
-    "projects": (
-        "ethosProjects",
-        'ownerProfile_: {{ profileId: "{pid}" }}',
-        """
-        id projectId userkey status name description createdAt updatedAt
-        ownerProfile { id profileId }
-        """,
-    ),
-    "bonds": (
-        "ethosBonds",
-        'authorProfile_: {{ profileId: "{pid}" }}',
-        """
-        id bondId amount bondType amountType status createdAt releasedAt
-        authorProfile { id profileId }
-        """,
-    ),
-}
+# Goldsky ethos-network-base 1.1.0 is Profile + Address only.
+# Reviews (and other former signal entities) are not in the subgraph.
+# Reviews: dedicated worker ethos_reviews_api (Ethos API v2).
+ENTITY_QUERIES: dict[str, tuple[str, str, str]] = {}
 
 
 def _build_query(root: str, where: str, fields: str, skip: int) -> str:
@@ -154,6 +77,12 @@ async def fetch_all_signals(
     profile_id: int,
 ) -> dict[str, list[dict[str, Any]]]:
     result: dict[str, list[dict[str, Any]]] = {}
+    if not ENTITY_QUERIES:
+        logger.info(
+            "Goldsky signal entities disabled (subgraph slim); skipping GraphQL profile_id=%s",
+            profile_id,
+        )
+        return result
     for entity in ENTITY_QUERIES:
         rows = await fetch_entity_pages(
             client, url=url, entity=entity, profile_id=profile_id

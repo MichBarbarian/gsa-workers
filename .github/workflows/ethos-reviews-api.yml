@@ -1,0 +1,46 @@
+name: Ethos reviews API
+
+on:
+  schedule:
+    - cron: "0 0,6,12,18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ethos-reviews-api
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: workers/ethos_reviews_api
+        run: uv sync
+
+      - name: Run Ethos reviews API
+        working-directory: workers/ethos_reviews_api
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          MAX_RUNTIME_SECONDS: 19800
+          WORKER_ID: reviews-a
+          CONCURRENCY: 3
+          CLAIM_BATCH_SIZE: 10
+          CLAIM_STALE_SECONDS: 7200
+          THROTTLE_MS: 200
+          UPSERT_CHUNK_SIZE: 200
+        run: uv run python job.py
