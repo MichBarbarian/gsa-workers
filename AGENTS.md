@@ -36,7 +36,8 @@ Entry point for AI agents (and humans) changing GitHub Actions batch workers.
 Ops / stuck wallets: [docs/OPS.md](./docs/OPS.md). Deprecations: [docs/DEPRECATION.md](./docs/DEPRECATION.md) (`ethos-enrich` absorbed by `on_demand_backfill`).  
 LP discovery is live; 15-day refresh still pending: [docs/PENDING_LP_POSITIONS.md](./docs/PENDING_LP_POSITIONS.md).  
 Token contracts + Alchemy Free design: [docs/TOKEN_CONTRACTS_DISCOVERY_ALCHEMY.md](./docs/TOKEN_CONTRACTS_DISCOVERY_ALCHEMY.md).  
-15d activity ingest: [workers/wallet_activity_flows/README.md](./workers/wallet_activity_flows/README.md) → staging `wallets.wallet_activity_transfers`. Probe/enrich census removed ([DEPRECATION.md](./docs/DEPRECATION.md)).
+15d activity ingest: [workers/wallet_activity_flows/README.md](./workers/wallet_activity_flows/README.md) → staging `wallets.wallet_activity_transfers`. Probe/enrich census removed ([DEPRECATION.md](./docs/DEPRECATION.md)).  
+Funding first-inflows: [workers/wallet_funding_transfers/README.md](./workers/wallet_funding_transfers/README.md) → `wallets.wallet_funding_transfers` (one-shot, non-Dormant first). Do not revive Walcert Alchemy fund-origins Edge.
 
 ## Hard rules
 

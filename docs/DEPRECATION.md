@@ -102,3 +102,16 @@ Census getLogs probe + enrich-flag pipeline was removed (ADR 2026-08-13). Do **n
 | Rollup Fuente B (`does_need_token_activity_enrich` on D vs D−1) | Removed from `wallet_rollup_daily_metrics` |
 
 Live replacement: `workers/wallet_activity_flows/` → INSERT-only staging `wallets.wallet_activity_transfers`. Do not re-add probe getLogs, enrich flags, or Fuente B enqueue.
+
+## Walcert Alchemy fund origins (replaced by GHA funding transfers)
+
+First-inflow ingest is **`wallet_funding_transfers`** (Etherscan / Blockscout / Ankr / OKX → `wallets.wallet_funding_transfers`). Do **not** re-enable the Walcert Alchemy Edge + pg_cron path.
+
+| Legacy | Status |
+|---|---|
+| Edge `walcert-alchemy-fund-origins` | Keep **disabled**; GHA worker is the ingest path |
+| pg_cron `walcert_alchemy_fund_origins_import_data` / `analyze_fund_origins` / first-activity | Stay **`active = false`** |
+| `walcert.wallet_imported_data.fund_origins_json` | Legacy JSON dump; new rows go to `wallets.wallet_funding_transfers` |
+| `walcert.wallet_fund_origins` | Historical analyze output; **not** written by v1 worker |
+
+Analyze / WAMI Origins consume of the new staging table is a follow-up. Keep using `ETHERSCAN_FUNDING_KEY` / `BLOCKSCOUT_FUNDING_KEY` / `ANKR_FUNDING_KEY`, not the 15d activity keys.

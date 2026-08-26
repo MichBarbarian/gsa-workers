@@ -149,6 +149,42 @@ URI workers claim agents / feedbacks / `agent_manifest` / `uri_documents` (not w
 
 Monitoring SQL: [SUPABASE.md](./SUPABASE.md) (Agent URI sections). READMEs: [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md), [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md).
 
+## Wallet funding transfers
+
+One-shot ingest of the first ~500 **incoming** native+ERC-20 transfers (`workers/wallet_funding_transfers`). Claims `erc_8004.wallet_transactions` (`is_valid_funding_transfers`). Success sets `funding_transfers_next_eligible_at = infinity`. Empty wallet still completes. Does **not** write `walcert.wallet_fund_origins`.
+
+Matrix groups: `etherscan` · `blockscout` · `bsc` · `xlayer`. Cron every 6h UTC + `workflow_dispatch`.
+
+| Log line | Meaning |
+|---|---|
+| `Claimed batch size=` | Claim OK; provider fetch about to run |
+| `Done wt_id=` | Insert + complete (possibly 0 rows) |
+| `{PROVIDER}_QUOTA_EXHAUSTED stop_claim=1` | Daily (Etherscan/Blockscout) or monthly (Ankr) credits gone; in-flight rows unlocked; **exit 0** |
+| `queue empty` | No due rows for this group; exit 0 |
+
+| Symptom | Likely cause | Action |
+|---|---|---|
+| Workflow fails on missing secret | `ETHERSCAN_FUNDING_KEY` / `BLOCKSCOUT_FUNDING_KEY` / `ANKR_FUNDING_KEY` | Use **funding** secrets, not 15d `ETHERSCAN_API_KEY` / `ANKR_API_KEY` |
+| Group exits 0 after a few wallets | Quota circuit breaker | Wait next UTC day (Etherscan/Blockscout) or month (Ankr); do not retry in the same run |
+| `due_active` never falls | Claim SQL / seed flags | Confirm migration `20260826010000_wallet_funding_transfers.sql`; check `is_valid_funding_transfers` |
+| Staging empty after Done | Wallet has no incoming native/ERC-20 | Expected; one-shot still completes |
+
+**Re-run:** Actions → **Wallet funding transfers** → **Run workflow** (empty `provider_group` = all four cells).
+
+```sql
+SELECT
+  count(*) FILTER (WHERE is_valid_funding_transfers IS TRUE) AS seeded,
+  count(*) FILTER (
+    WHERE is_valid_funding_transfers IS TRUE
+      AND COALESCE(wallet_category, '') NOT LIKE 'Dormant_%'
+      AND funding_transfers_next_eligible_at <= NOW()
+  ) AS due_active,
+  count(*) FILTER (WHERE funding_transfers_completed_at IS NOT NULL) AS completed
+FROM erc_8004.wallet_transactions;
+```
+
+Worker README: [`wallet_funding_transfers`](../workers/wallet_funding_transfers/README.md).
+
 ## Dual daily workers
 
 `wallet_nonce_balance_daily` runs **two** GHA jobs (`worker-a`, `worker-b`) with separate concurrency groups. They share the same claim SQL (`FOR UPDATE SKIP LOCKED`), so batches do not overlap. Both need the same secrets.
@@ -178,9 +214,9 @@ Deploy order when both change: **schema → worker → workflow_dispatch**.
 
 ## Related
 
-- [PROCESSES.md](./PROCESSES.md) — live pipeline catalog (#13 on-demand, **#16 Ethos reviews API**)
+- [PROCESSES.md](./PROCESSES.md) — live pipeline catalog (#9b funding transfers, #13 on-demand, **#16 Ethos reviews API**)
 - [PENDING_LP_POSITIONS.md](./PENDING_LP_POSITIONS.md) — LP 15-day refresh (discovery already live)
 - [SUPABASE.md](./SUPABASE.md) — monitoring and backfill SQL
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — pipeline and budgets
 - [DEPRECATION.md](./DEPRECATION.md) — do not re-enable old crons / Edge URI
-- Workers: [`wallet_lp_positions_discovery`](../workers/wallet_lp_positions_discovery/README.md), [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md), [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md), [`ethos_reviews_api`](../workers/ethos_reviews_api/README.md)
+- Workers: [`wallet_lp_positions_discovery`](../workers/wallet_lp_positions_discovery/README.md), [`wallet_funding_transfers`](../workers/wallet_funding_transfers/README.md), [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md), [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md), [`ethos_reviews_api`](../workers/ethos_reviews_api/README.md)

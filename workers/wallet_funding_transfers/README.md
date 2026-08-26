@@ -32,4 +32,6 @@ $env:PROVIDER_GROUP="etherscan"
 uv run python job.py
 ```
 
-Deploy schema first. Cron: `0 */6 * * *` UTC + `workflow_dispatch`.
+Schema applied in prod 2026-08-26. Cron: `0 */6 * * *` UTC + `workflow_dispatch`.
+
+Monitoring SQL: [docs/SUPABASE.md](../../docs/SUPABASE.md#funding-transfers-first-inflows). Ops: [docs/OPS.md](../../docs/OPS.md). Do not revive Walcert Alchemy fund-origins Edge ([DEPRECATION.md](../../docs/DEPRECATION.md)).
