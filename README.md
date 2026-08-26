@@ -17,6 +17,7 @@ Unified Python batch workers for [Global Score Agent](https://www.globalscoreage
 | [`wallet_token_portfolio_discovery`](./workers/wallet_token_portfolio_discovery/README.md) | 0, 6, 12, 18h | portfolio discovery flag after contract discovery | Alchemy amounts + DeFiLlama → fungible `wallet_token_positions` |
 | [`wallet_lp_positions_discovery`](./workers/wallet_lp_positions_discovery/README.md) | 0, 6, 12, 18h | LP flag after portfolio discovery | UniV3 NFT + `lp_pools` classic → `wallet_lp_positions` |
 | [`wallet_activity_flows`](./workers/wallet_activity_flows/README.md) | 1/15 00:00 + every 4h | `is_valid_activity_flows` + not `Dormant_*` | 15d transfers → staging `wallets.wallet_activity_transfers` |
+| [`wallet_funding_transfers`](./workers/wallet_funding_transfers/README.md) | every 6h | `is_valid_funding_transfers` (non-Dormant first) | First ~500 incoming → `wallets.wallet_funding_transfers` |
 | [`agent_uri_resolve`](./workers/agent_uri_resolve/README.md) | 00:00, 12:00 | agents / `feedback_on_chain` / external feedbacks pending | Resolve/materialize → `uri_documents` + `agent_manifest` |
 | [`agent_uri_reprocess`](./workers/agent_uri_reprocess/README.md) | 06:00, 18:00 | download errors (max 3) + off-chain docs &gt;15d | Retry errors; refresh HTTP/IPFS; `is_processed` only if document changed |
 | [`ai_agent_classifier`](./workers/ai_agent_classifier/README.md) | 0, 6, 12, 18h | `web_dashboard.agents.does_need_ai_category_process` | LLM categories → `ai_category_*` (+ `llm.models_requests` rate limits) |
@@ -54,10 +55,13 @@ Reference-data: `dune_queries_import` (4 Dune queries → upserts); `token_price
 | `MISTRAL` | Optional (classifier Mistral) | AI Studio / La Plateforme Experiment key (`llm.llm_provider.secret`) |
 | `CLOUDFLARE` | Optional (classifier Workers AI) | Cloudflare API token with Workers AI + AI Gateway (`llm.llm_provider.secret`) |
 | `ETHERSCAN_API_KEY` | For activity flows (ETH/Arb/Polygon/Celo) | Etherscan V2 Free |
+| `ETHERSCAN_FUNDING_KEY` | For funding transfers (ETH/Arb/Polygon/Celo) | Separate Etherscan V2 key — not `ETHERSCAN_API_KEY` |
+| `BLOCKSCOUT_FUNDING_KEY` | For funding transfers (Base + Gnosis) | Blockscout PRO Free |
 | `ALCHEMY_ACTIVITY_KEY_1` | For activity flows (Base + Gnosis) | Dedicated Transfers key — not `ALCHEMY_FREE_KEY` |
 | `ALCHEMY_ACTIVITY_KEY_2` | For activity flows BSC day-1 cut | Dedicated Alchemy **Free** app — not `ALCHEMY_FREE_KEY` |
 | `ANKR_API_KEY` | For activity flows BSC day-15 cut | Ankr Advanced API |
-| `OKX_API_KEY` / `OKX_SECRET_KEY` / `OKX_PASSPHRASE` | For activity flows X Layer | OKX **Data API** HMAC (not Market API) |
+| `ANKR_FUNDING_KEY` | For funding transfers (BSC) | Separate Ankr Advanced key — not `ANKR_API_KEY` |
+| `OKX_API_KEY` / `OKX_SECRET_KEY` / `OKX_PASSPHRASE` | For activity flows + funding X Layer | OKX **Data API** HMAC (not Market API) |
 
 ## CI defaults (workflows)
 
@@ -72,6 +76,7 @@ Reference-data: `dune_queries_import` (4 Dune queries → upserts); `token_price
 | token portfolio discovery | 5 | 25 | 7200 | 19800 |
 | LP positions discovery | 5 | 25 | 7200 | 19800 |
 | activity flows 15d | 1 | 20 | 7200 | 19800 |
+| funding transfers | 1 | 20 | 7200 | 19800 |
 | agent URI resolve | 4 | 20 | n/a | 19800 |
 | agent URI reprocess | 4 | 20 | n/a | 19800 |
 | AI agent classifier | 1 | 20 | n/a | 19800 |

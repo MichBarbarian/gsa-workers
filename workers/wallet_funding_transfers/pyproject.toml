@@ -1,0 +1,12 @@
+[project]
+name = "wallet-funding-transfers"
+version = "0.1.0"
+description = "First ~500 incoming transfers ingest (INSERT-only)"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28",
+    "psycopg[binary]>=3.2",
+]
+
+[dependency-groups]
+dev = []

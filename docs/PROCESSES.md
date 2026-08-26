@@ -49,6 +49,7 @@ flowchart TB
   portfolio --> lp
   lp --> wlp[wallets.wallet_lp_positions]
   activityFlows --> wat[wallets.wallet_activity_transfers]
+  fundingTransfers[wallet_funding_transfers] --> wft[wallets.wallet_funding_transfers]
   dune --> cexT[wallets.cex_addresses]
   dune --> mixT[wallets.mixer_addresses]
   dune --> brT[wallets.bridge_addresses]
@@ -79,6 +80,7 @@ flowchart TB
 | 7 | [`token_prices_import`](../workers/token_prices_import/README.md) | Reference | 0/6/12/18 | unpriced ERC-20s (`has_price_error`) | `token_prices_upsert` + `apply_prices` + `mark_price_misses` | `token_prices` → positions |
 | 8 | [`wallet_lp_positions_discovery`](../workers/wallet_lp_positions_discovery/README.md) | Claim (`wallet_transactions`) | 0/6/12/18 | `does_need_lp_discovery` | `wallet_lp_positions_upsert` | `wallets.wallet_lp_positions` |
 | 9 | [`wallet_activity_flows`](../workers/wallet_activity_flows/README.md) | Claim (`wallet_transactions`, matrix 4) | 1/15 00:00 + every 4h drain | `is_valid_activity_flows` + due clock + not `Dormant_*` + valid agent | `wallet_activity_transfers_insert` | Staging `wallets.wallet_activity_transfers` (INSERT-only) |
+| 9b | [`wallet_funding_transfers`](../workers/wallet_funding_transfers/README.md) | Claim (`wallet_transactions`, matrix 4) | every 6h drain | `is_valid_funding_transfers` + due clock; non-`Dormant_*` first | `wallet_funding_transfers_insert` | `wallets.wallet_funding_transfers` (first ~500 incoming, INSERT-only) |
 | 10 | [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md) | Claim (agents / feedbacks) | 00:00, 12:00 | `is_uri_processed` / `is_feedback_processed` | direct SQL | `uri_documents` + `agent_manifest` |
 | 11 | [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md) | Claim (manifest errors + docs) | 06:00, 18:00 | download errors / off-chain &gt;15d | direct SQL | retry + refresh `uri_documents` (failed refresh still stamps `fetched_at`) |
 | 12 | [`ai_agent_classifier`](../workers/ai_agent_classifier/README.md) | Claim (`web_dashboard.agents`) | 0/6/12/18 | `does_need_ai_category_process` | exact-hash copy or LLM | `ai_category_*` + `ai_category_input_hash` |
@@ -162,6 +164,29 @@ claim (no Dormant_*, valid agent) →
 
 Worker README: [`wallet_activity_flows`](../workers/wallet_activity_flows/README.md). Schema: `gsa-supabase-schema` `20260813010000_wallet_activity_transfers.sql`. Probe/enrich census: [DEPRECATION.md](./DEPRECATION.md).
 
+### 9b. Wallet funding transfers (first-inflow ingest)
+
+**Live (schema must be applied first).** Matrix 4 cells. Cron every **6h** UTC + `workflow_dispatch` until the queue is empty or a provider quota trips (`exit 0`). INSERT-only into `wallets.wallet_funding_transfers`. Does **not** run `analyze_fund_origins` or write `walcert.wallet_fund_origins`.
+
+```
+claim (all mapped chains; non-Dormant_* first) →
+  adapter (Etherscan / Blockscout / Ankr / OKX) →
+  cap ~500 incoming native+ERC-20 →
+  INSERT ON CONFLICT DO NOTHING →
+  next_eligible = infinity
+```
+
+| Item | Detail |
+|---|---|
+| Groups | `etherscan` (ETH/Arb/Polygon/Celo); `blockscout` (Base/Gnosis); `bsc` (Ankr); `xlayer` (OKX Data API) |
+| Window | Genesis → now; oldest incoming |
+| Empty wallet | Completes OK with no INSERT |
+| Quota | Daily Etherscan/Blockscout or monthly Ankr → unlock batch, stop group, exit 0 |
+| Secrets | `ETHERSCAN_FUNDING_KEY`, `BLOCKSCOUT_FUNDING_KEY`, `ANKR_FUNDING_KEY` (not the 15d keys), OKX HMAC trio |
+| Workflow | `wallet-funding-transfers.yml` |
+
+Worker README: [`wallet_funding_transfers`](../workers/wallet_funding_transfers/README.md). Schema: `gsa-supabase-schema` `20260826010000_wallet_funding_transfers.sql`.
+
 ### 10. Agent URI resolve (ingest)
 
 **Live.** Replaces Edge `agent-uri-batch-processor` / `feedback-uri-batch-processor` for **first-time** URI materialize.
@@ -209,6 +234,7 @@ Worker README: [`ai_agent_classifier`](../workers/ai_agent_classifier/README.md)
 | [PENDING_LP_POSITIONS.md](./PENDING_LP_POSITIONS.md) | Discovery **live**; only **15-day refresh** worker remains |
 | Walcert consume of `wallet_activity_transfers` | Follow-up — normalize / `analyze_recent_flows` / DELETE staging; do not retarget in this worker |
 | Agent manifest **consume** | Not built — rewrite SQL readers to JOIN `uri_documents`, then GHA orchestrator; keep legacy pg_cron consume **off** |
+| Funding analyze / WAMI Origins | Ingest live; `analyze_fund_origins` / `walcert.wallet_fund_origins` not in v1 |
 
 ### 13. On-demand backfill (Ethos + ERC-8183 + Virtual ACP + Olas Mech)
 

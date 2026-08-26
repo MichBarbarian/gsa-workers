@@ -20,7 +20,7 @@ Schema migrations and snapshot/upsert SQL live in the sibling repo **`gsa-supaba
 | `erc_8004.wallets` | Claim queue, JSON payloads, status, `next_eligible_at` |
 | `erc_8004.chains` | Active chains + `subdomain_alchemy` for Alchemy fallback |
 | `erc_8004.wallet_daily_metrics` | Daily flat nonce/balance per wallet×chain×date (written by daily snapshot). `snapshot_date` = Postgres `CURRENT_DATE` (DB timezone, typically UTC). |
-| `erc_8004.wallet_transactions` | Read model: current nonce/balance + 30d history + category. Updated by **`wallet_rollup_daily_metrics`** (not by daily snapshot). Claim queue for token/LP discovery + **activity flows 15d**. |
+| `erc_8004.wallet_transactions` | Read model: current nonce/balance + 30d history + category. Updated by **`wallet_rollup_daily_metrics`** (not by daily snapshot). Claim queue for token/LP discovery + **activity flows 15d** + **funding transfers**. |
 | `erc_8004.chain_nonces` | Per-chain daily nonce totals (not written by current daily snapshot) |
 | `erc_8004.wallet_owner_details` | Monthly + origin snapshots: owner metrics / first tx |
 | `wallets.cex_addresses` | CEX address reference list (Dune import) |
@@ -147,6 +147,32 @@ FROM erc_8004.wallet_transactions;
 
 Staging table: `wallets.wallet_activity_transfers` via `wallets.wallet_activity_transfers_insert`. PK `(wallet_id, chain_id, unique_id)`. `chain_id` is `erc_8004.chains.id`. Migration: `20260813010000_wallet_activity_transfers.sql`. Schema doc: `gsa-supabase-schema/supabase/docs/wallet-activity-transfers.md`.
 
+### Funding transfers (first inflows)
+
+| Column | Role |
+|---|---|
+| `is_valid_funding_transfers` | Chain in funding map (same 8 EVM ids as activity) |
+| `funding_transfers_next_eligible_at` | Claim clock. Success → `infinity`. New inserts `-infinity` via BI |
+| `funding_transfers_claimed_at` / `claimed_by` | Soft lock (`CLAIM_STALE_SECONDS`) |
+| `funding_transfers_completed_at` | Last successful ingest (empty still counts) |
+| `has_funding_transfers_error` / `funding_transfers_message_error` | Last failure (requeue +1h) |
+
+Claim prefers `wallet_category NOT LIKE 'Dormant_%'`. Quota exhausted unlocks the in-flight batch.
+
+```sql
+SELECT
+  count(*) FILTER (WHERE is_valid_funding_transfers IS TRUE) AS seeded,
+  count(*) FILTER (
+    WHERE is_valid_funding_transfers IS TRUE
+      AND COALESCE(wallet_category, '') NOT LIKE 'Dormant_%'
+      AND funding_transfers_next_eligible_at <= NOW()
+  ) AS due_active,
+  count(*) FILTER (WHERE funding_transfers_completed_at IS NOT NULL) AS completed
+FROM erc_8004.wallet_transactions;
+```
+
+Table: `wallets.wallet_funding_transfers` via `wallets.wallet_funding_transfers_insert`. Migration: `20260826010000_wallet_funding_transfers.sql`.
+
 Probe/enrich census columns were dropped. Do not revive them ([DEPRECATION.md](./DEPRECATION.md)).
 
 ### URI ingest (`uri_documents` / `agent_manifest`)
@@ -251,6 +277,7 @@ Canonical SQL / migrations: `gsa-supabase-schema/supabase/migrations/` and `supa
 | token portfolio discovery | `wallets.wallet_token_positions_insert(p_wallet_id, p_chain_id, p_rows jsonb)` | `wallets.wallet_token_positions` (INSERT … ON CONFLICT DO NOTHING) |
 | LP positions discovery | `wallets.wallet_lp_positions_upsert(p_wallet_id, p_chain_id, p_rows jsonb)` | `wallets.wallet_lp_positions` (DELETE+INSERT replace per wallet+chain; stamps `calculated_at`) |
 | activity flows 15d | `wallets.wallet_activity_transfers_insert(p_rows jsonb)` | Staging `wallets.wallet_activity_transfers` (INSERT … ON CONFLICT DO NOTHING) |
+| funding transfers | `wallets.wallet_funding_transfers_insert(p_rows jsonb)` | Staging `wallets.wallet_funding_transfers` (INSERT … ON CONFLICT DO NOTHING) |
 | endpoint liveness 15d | `agent_endpoint_health_sync` / `_claim` / `_complete` / `_complete_batch` | `erc_8004.agent_endpoint_health` |
 
 Dune upserts: JSON arrays; empty array raises. Worker sends **chunks** (default 5000). Scripts: `wallets_cex_addresses_upsert.sql`, `wallets_dune_reference_tables.sql`. Docs: `gsa-supabase-schema/supabase/docs/wallets-dune-reference-tables.md`.

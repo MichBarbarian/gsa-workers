@@ -1,0 +1,77 @@
+name: Wallet funding transfers
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      provider_group:
+        description: "etherscan | blockscout | bsc | xlayer (empty = all matrix cells)"
+        required: false
+        default: ""
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        group: [etherscan, blockscout, bsc, xlayer]
+    concurrency:
+      group: wallet-funding-transfers-${{ matrix.group }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Maybe skip unused matrix cell
+        id: gate
+        shell: bash
+        env:
+          ONLY: ${{ github.event.inputs.provider_group }}
+          CELL: ${{ matrix.group }}
+        run: |
+          if [ -n "$ONLY" ] && [ "$ONLY" != "$CELL" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install uv
+        if: steps.gate.outputs.skip != 'true'
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        if: steps.gate.outputs.skip != 'true'
+        working-directory: workers/wallet_funding_transfers
+        run: uv sync
+
+      - name: Run wallet funding transfers
+        if: steps.gate.outputs.skip != 'true'
+        working-directory: workers/wallet_funding_transfers
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ETHERSCAN_FUNDING_KEY: ${{ secrets.ETHERSCAN_FUNDING_KEY }}
+          BLOCKSCOUT_FUNDING_KEY: ${{ secrets.BLOCKSCOUT_FUNDING_KEY }}
+          ANKR_FUNDING_KEY: ${{ secrets.ANKR_FUNDING_KEY }}
+          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
+          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
+          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
+          PROVIDER_GROUP: ${{ matrix.group }}
+          MAX_RUNTIME_SECONDS: 19800
+          CONCURRENCY: 1
+          CLAIM_BATCH_SIZE: 20
+          CLAIM_STALE_SECONDS: 7200
+          FUNDING_MAX_TRANSFERS: 500
+          WORKER_ID: ${{ matrix.group }}
+        run: uv run python job.py

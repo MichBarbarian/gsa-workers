@@ -60,6 +60,7 @@ Token contracts + Alchemy Free design: [docs/TOKEN_CONTRACTS_DISCOVERY_ALCHEMY.m
 | `wallet_token_portfolio_discovery` | `wallet-token-portfolio-discovery.yml` | `wallets.wallet_token_positions_insert` | `wallets.wallet_token_positions` (fungible) |
 | `wallet_lp_positions_discovery` | `wallet-lp-positions-discovery.yml` | `wallets.wallet_lp_positions_upsert` | `wallets.wallet_lp_positions` (NFT + classic LP) |
 | `wallet_activity_flows` | `wallet-activity-flows.yml` (matrix etherscan / alchemy_k1 / bsc / xlayer) | `wallets.wallet_activity_transfers_insert` | `wallets.wallet_activity_transfers` (staging INSERT-only) |
+| `wallet_funding_transfers` | `wallet-funding-transfers.yml` (matrix etherscan / blockscout / bsc / xlayer) | `wallets.wallet_funding_transfers_insert` | `wallets.wallet_funding_transfers` (first ~500 incoming, INSERT-only) |
 | `agent_uri_resolve` | `agent-uri-resolve.yml` | direct SQL upsert | `uri_documents` + `agent_manifest` (ingest) |
 | `agent_uri_reprocess` | `agent-uri-reprocess.yml` | direct SQL upsert | error retry + off-chain `uri_documents` refresh |
 | `ai_agent_classifier` | `ai-agent-classifier.yml` | direct SQL | `web_dashboard.agents` AI category fields (`llm` config) |
@@ -76,7 +77,7 @@ Walcert consume of `wallet_activity_transfers` (normalize / `analyze_recent_flow
 
 1. Local: `cd workers/<name>`, `uv sync`, `uv run python job.py` with `SUPABASE_DB_URL` (+ Alchemy / Dune / CoinGecko / `PINATA_GATEWAY` / `SCRAPING_ANT_KEY` / `GROQ` as needed). URI workers also need `uv run playwright install chromium`.
 2. Or GitHub Actions → workflow → **Run workflow** (`workflow_dispatch`).
-3. Logs: `Claimed batch`, reconnect/retry, snapshot failures (wallet claim), Dune tasks / chunk upserts, token-price enrich, discovery `Done wt_id=`, activity flows `Done wt_id=`, URI `Claimed agents` / `on-chain` / `Reprocess` / `Refresh`, classifier `Done agent_id=`, on-demand backfill `Step done name=` / `skipped_empty` / `Claimed history` / `Claimed satellite`, endpoint liveness `queue empty` / `Claimed batch`, or Ethos reviews `Done profile_id=`.
+3. Logs: `Claimed batch`, reconnect/retry, snapshot failures (wallet claim), Dune tasks / chunk upserts, token-price enrich, discovery `Done wt_id=`, activity flows `Done wt_id=`, funding transfers `Done wt_id=` / `QUOTA_EXHAUSTED`, URI `Claimed agents` / `on-chain` / `Reprocess` / `Refresh`, classifier `Done agent_id=`, on-demand backfill `Step done name=` / `skipped_empty` / `Claimed history` / `Claimed satellite`, endpoint liveness `queue empty` / `Claimed batch`, or Ethos reviews `Done profile_id=`.
 4. SQL: eligible counts in [docs/SUPABASE.md](./docs/SUPABASE.md) (wallets + URI + AI classifier sections); Ethos/8183 catch-up counts in worker README / vault Monitoreo.
 
 ## When to touch which repo

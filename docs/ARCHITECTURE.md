@@ -81,6 +81,7 @@ stateDiagram-v2
 | `wallet_token_portfolio_discovery` | `wallet-token-portfolio-discovery.yml` | `wallet-token-portfolio-discovery` | 1 runner |
 | `wallet_lp_positions_discovery` | `wallet-lp-positions-discovery.yml` | `wallet-lp-positions-discovery` | 1 runner |
 | `wallet_activity_flows` | `wallet-activity-flows.yml` | per provider group | etherscan / alchemy_k1 / bsc / xlayer; `max-parallel: 4`; cron 1/15 + every 4h |
+| `wallet_funding_transfers` | `wallet-funding-transfers.yml` | per provider group | etherscan / blockscout / bsc / xlayer; `max-parallel: 4`; cron every 6h |
 | `agent_uri_resolve` | `agent-uri-resolve.yml` | `agent-uri-resolve` | 1 runner (00:00 / 12:00) |
 | `agent_uri_reprocess` | `agent-uri-reprocess.yml` | `agent-uri-reprocess` | 1 runner (06:00 / 18:00) |
 | `ai_agent_classifier` | `ai-agent-classifier.yml` | `ai-agent-classifier` | 1 runner (0/6/12/18) |
@@ -93,6 +94,7 @@ Token prices import schedule: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.
 URI resolve: `0 0,12 * * *`; URI reprocess: `0 6,18 * * *` (split cadence by design).  
 AI classifier: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
 Activity flows 15d: `0 0 1,15 * *` + `0 */4 * * *` UTC + `workflow_dispatch`.  
+Funding transfers: `0 */6 * * *` UTC + `workflow_dispatch`.  
 Endpoint liveness 15d: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
 Ethos reviews API: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.
 
@@ -110,6 +112,7 @@ Ethos reviews API: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.
 | token portfolio discovery | `does_need_portfolio_discovery` after contract discovery | Alchemy amounts + DeFiLlama → fungible `wallet_token_positions_insert` |
 | LP positions discovery | `does_need_lp_discovery` after portfolio discovery | NFT + `lp_pools` → `wallet_lp_positions_upsert` |
 | activity flows 15d | `is_valid_activity_flows` + due clock + not `Dormant_*` + valid agent | Adapter → INSERT `wallets.wallet_activity_transfers`; empty OK |
+| funding transfers | `is_valid_funding_transfers` + due clock; non-`Dormant_*` first | Adapter → INSERT `wallets.wallet_funding_transfers`; one-shot; empty OK |
 | agent URI resolve | agents / on-chain / external feedbacks pending | Resolve/materialize → `uri_documents` + `agent_manifest` |
 | agent URI reprocess | download errors (max 3) + off-chain docs &gt;15d | Retry + refresh; `is_processed` only if document changed; failed refresh still stamps `fetched_at` |
 | AI agent classifier | `does_need_ai_category_process` | LLM → `ai_category_*` on `web_dashboard.agents`; rotate `llm.models` by daily cap |
@@ -300,13 +303,14 @@ Origin also has `scripts/check_pending.py` and `scripts/compare_smoke.py`. `wall
 | token portfolio discovery | 5 | 25 | 7200 |
 | LP positions discovery | 5 | 25 | 7200 |
 | activity flows 15d | 1 | 20 | 7200 |
+| funding transfers | 1 | 20 | 7200 |
 | agent URI resolve | 4 | 20 | n/a |
 | agent URI reprocess | 4 | 20 | n/a |
 | AI agent classifier | 1 | 20 | n/a |
 | on-demand backfill | Ethos 3 / satellites 5 | Ethos 10 / satellites 100 | 7200 |
 | Ethos reviews API | 3 | 10 | 7200 |
 
-Secrets: `SUPABASE_DB_URL` (required), `ALCHEMY_KEY` (balance/nonce), `ALCHEMY_FREE_KEY` (contracts / portfolio / LP), `ETHERSCAN_API_KEY` / `ALCHEMY_ACTIVITY_KEY_1` / `ALCHEMY_ACTIVITY_KEY_2` / `ANKR_API_KEY` / OKX HMAC (`OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE`) for activity flows (`ALCHEMY_ACTIVITY_KEY_2` is a dedicated Free app — do not reuse `ALCHEMY_FREE_KEY`), `DUNE_KEY` (dune queries), `COINGECKO_KEY` (token prices), `PINATA_GATEWAY` (URI IPFS last fallback; Gateway Key, not API JWT) / `SCRAPING_ANT_KEY` (URI HTTP last fallback), `GROQ` (AI classifier). Daily sets `WORKER_ID` from the matrix.
+Secrets: `SUPABASE_DB_URL` (required), `ALCHEMY_KEY` (balance/nonce), `ALCHEMY_FREE_KEY` (contracts / portfolio / LP), `ETHERSCAN_API_KEY` / `ALCHEMY_ACTIVITY_KEY_1` / `ALCHEMY_ACTIVITY_KEY_2` / `ANKR_API_KEY` / OKX HMAC for activity flows, `ETHERSCAN_FUNDING_KEY` / `BLOCKSCOUT_FUNDING_KEY` / `ANKR_FUNDING_KEY` for funding transfers (do not reuse 15d Etherscan/Ankr keys), `DUNE_KEY`, `COINGECKO_KEY`, `PINATA_GATEWAY` / `SCRAPING_ANT_KEY`, `GROQ`. Daily sets `WORKER_ID` from the matrix.
 
 ## On-demand backfill (orchestrator)
 
