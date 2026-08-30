@@ -243,7 +243,7 @@ Hex / on-chain synthetic docs are **not** TTL-refreshed — subgraph import requ
 5. Categories include quality buckets `Invalid Metadata` / `Insufficient Metadata` and `Trading Bots` (product clones like Ave/Debot) vs semantic `Trading`.
 6. Increment `llm.models_requests` only on LLM calls; persist classification (incl. hash) or error columns; clear queue flag.
 
-Secrets: env name = `llm.llm_provider.secret` (Groq → `GROQ`). Gemini/Cerebras later = new provider rows + secrets (same client).
+Secrets: env name = `llm.llm_provider.secret` (Groq → `GROQ`, NVIDIA → `NVIDIA`, …). NVIDIA hosted NIM uses one key for Nemotron + MiniMax M3 + Kimi K3 (`pick_model` id-asc = Nemotron first). LLM HTTP read timeout **120s**.
 
 ## Time budgets
 
@@ -252,7 +252,7 @@ Secrets: env name = `llm.llm_provider.secret` (Groq → `GROQ`). Gemini/Cerebras
 | GHA `timeout-minutes` | 360 (claim workers / token-prices), 90 (dune queries) |
 | `MAX_RUNTIME_SECONDS` | 19800 (~5.5h) — soft stop inside claim / enrich `job.py` |
 | Postgres `statement_timeout` | 300s |
-| HTTP client timeout | ~10s (daily/monthly), ~30s (origin), ~120s (Dune) |
+| HTTP client timeout | ~10s (daily/monthly), ~30s (origin), ~120s (Dune), **120s** (AI classifier LLM read) |
 
 ## Resilience
 

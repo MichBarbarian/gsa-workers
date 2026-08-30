@@ -39,7 +39,7 @@ async def chat_completion(
     max_completion_tokens: int | None,
     response_format: str | None,
     thinking_off: bool = False,
-    timeout_seconds: float = 60.0,
+    timeout_seconds: float = 120.0,
 ) -> tuple[str, int]:
     """Return (content, total_tokens). total_tokens is 0 if usage missing."""
     url = f"{_normalize_base_url(base_url)}/chat/completions"

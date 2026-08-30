@@ -10,3 +10,5 @@ uv.lock
 Thumbs.db
 .idea/
 .vscode/
+.cursor/
+workers/ai_agent_classifier/_probe/

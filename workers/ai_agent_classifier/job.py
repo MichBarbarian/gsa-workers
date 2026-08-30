@@ -513,7 +513,8 @@ async def run_job() -> int:
             max_runtime_seconds,
         )
 
-        http_timeout = httpx.Timeout(60.0, connect=LLM_CONNECT_TIMEOUT_SECONDS)
+        # NIM frontier models (MiniMax / Kimi) often need 60–90s; keep connect short.
+        http_timeout = httpx.Timeout(120.0, connect=LLM_CONNECT_TIMEOUT_SECONDS)
         async with httpx.AsyncClient(
             timeout=http_timeout, limits=http_limits
         ) as http_client:
