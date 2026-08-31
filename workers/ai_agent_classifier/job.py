@@ -37,6 +37,8 @@ Outcome = Literal["ok", "error", "capacity"]
 LLM_429_MAX_ATTEMPTS = 3
 # Overall attempt ceiling for a single LLM call (covers 429 + transient network).
 LLM_MAX_ATTEMPTS = 4
+# NVIDIA NIM account RPM is shared across all slugs on the same API key.
+NVIDIA_PROVIDER_ID = 7
 # Base backoff (seconds) between retries on transient network errors.
 NETWORK_RETRY_BASE_SECONDS = 1.5
 # Connect timeout (seconds); short so a ConnectTimeout fails fast and retries cheaply.
@@ -144,6 +146,16 @@ def resolve_api_key(secret_name: str) -> str:
     return str(key).strip()
 
 
+def nvidia_account_rpm() -> int:
+    return env_int("NVIDIA_ACCOUNT_RPM", default=30, minimum=1, maximum=60)
+
+
+def provider_concurrency(provider_name: str, default: int) -> int:
+    if provider_name.lower() == "nvidia":
+        return env_int("NVIDIA_CONCURRENCY", default=1, minimum=1, maximum=5)
+    return default
+
+
 class RateLimiter:
     """Hardcap: at most request_per_minute calls per model in any rolling 60s window."""
 
@@ -168,6 +180,38 @@ class RateLimiter:
                 logger.info(
                     "RPM hardcap model_id=%s rpm=%s in_window=%s; sleeping %.2fs",
                     model_id,
+                    rpm,
+                    len(window),
+                    sleep_for,
+                )
+            await asyncio.sleep(max(sleep_for, 0.05))
+
+
+class ProviderRateLimiter:
+    """Hardcap: shared account RPM across all models of one provider (NVIDIA NIM)."""
+
+    WINDOW_SECONDS = 60.0
+
+    def __init__(self) -> None:
+        self._windows: dict[int, deque[float]] = defaultdict(deque)
+        self._lock = asyncio.Lock()
+
+    async def wait(self, provider_id: int, request_per_minute: int) -> None:
+        rpm = max(1, int(request_per_minute or 1))
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                window = self._windows[provider_id]
+                while window and (now - window[0]) >= self.WINDOW_SECONDS:
+                    window.popleft()
+                if len(window) < rpm:
+                    window.append(now)
+                    return
+                sleep_for = self.WINDOW_SECONDS - (now - window[0]) + 0.01
+                logger.info(
+                    "Provider RPM hardcap provider_id=%s rpm=%s in_window=%s; "
+                    "sleeping %.2fs",
+                    provider_id,
                     rpm,
                     len(window),
                     sleep_for,
@@ -286,6 +330,22 @@ class DailyTokenExhausted(Exception):
         self.model_id = model_id
 
 
+class ModelRateLimited(Exception):
+    """Model hit account RPM after retries; skip for this run."""
+
+    def __init__(self, model_id: int, message: str):
+        super().__init__(message)
+        self.model_id = model_id
+
+
+def _is_rpm_429(exc: BaseException) -> bool:
+    return (
+        _is_http_429(exc)
+        and not _is_tpd_429(exc)
+        and not _is_tpm_429(exc)
+    )
+
+
 async def call_llm_with_retries(
     http_client: httpx.AsyncClient,
     *,
@@ -295,17 +355,24 @@ async def call_llm_with_retries(
     user_prompt: str,
     estimate: int,
     rate_limiter: RateLimiter,
+    provider_rate_limiter: ProviderRateLimiter,
     token_minute_limiter: TokenMinuteLimiter,
     bump_model_usage,
 ) -> str:
     model_id = int(model["model_id"])
+    provider_id = int(model["provider_id"])
     rpm = int(model["request_per_minute"] or 1)
     tpm = model.get("tokens_per_minute")
     tpm_i = int(tpm) if tpm is not None else None
     last_exc: Exception | None = None
 
     for attempt in range(1, LLM_MAX_ATTEMPTS + 1):
-        await rate_limiter.wait(model_id, rpm)
+        if provider_id == NVIDIA_PROVIDER_ID:
+            await provider_rate_limiter.wait(
+                provider_id, nvidia_account_rpm()
+            )
+        else:
+            await rate_limiter.wait(model_id, rpm)
         await token_minute_limiter.wait(model_id, tpm_i, estimate)
         try:
             raw, total_tokens = await chat_completion(
@@ -336,7 +403,6 @@ async def call_llm_with_retries(
             await bump_model_usage(model_id, total_tokens)
             return raw
         except Exception as exc:
-            await bump_model_usage(model_id, 0)
             last_exc = exc
             if _is_http_429(exc) and _is_tpd_429(exc):
                 logger.warning(
@@ -385,8 +451,18 @@ async def call_llm_with_retries(
                 )
                 await asyncio.sleep(delay)
                 continue
+            if _is_rpm_429(exc):
+                logger.warning(
+                    "LLM RPM 429 model_id=%s after %s attempts; "
+                    "marking exhausted for this run",
+                    model_id,
+                    attempt,
+                )
+                raise ModelRateLimited(model_id, str(exc)) from exc
             raise
     assert last_exc is not None
+    if _is_rpm_429(last_exc):
+        raise ModelRateLimited(model_id, str(last_exc)) from last_exc
     raise last_exc
 
 
@@ -439,9 +515,10 @@ async def run_job() -> int:
     errors = 0
     db_lock = asyncio.Lock()
     rate_limiter = RateLimiter()
+    provider_rate_limiter = ProviderRateLimiter()
     token_minute_limiter = TokenMinuteLimiter()
     models_cache: list[dict[str, Any]] = []
-    exhausted_tpd: set[int] = set()
+    exhausted_models: set[int] = set()
     http_limits = httpx.Limits(max_connections=40, max_keepalive_connections=20)
 
     async def refresh_models() -> list[dict[str, Any]]:
@@ -520,14 +597,16 @@ async def run_job() -> int:
         ) as http_client:
 
             async def provider_loop(provider_id: int, provider_name: str) -> None:
-                sem = asyncio.Semaphore(concurrency)
+                lane_concurrency = provider_concurrency(provider_name, concurrency)
+                sem = asyncio.Semaphore(lane_concurrency)
                 provider_processed = 0
                 provider_completed = 0
                 provider_errors = 0
                 logger.info(
-                    "Provider worker start name=%s provider_id=%s",
+                    "Provider worker start name=%s provider_id=%s concurrency=%s",
                     provider_name,
                     provider_id,
+                    lane_concurrency,
                 )
 
                 while True:
@@ -547,7 +626,7 @@ async def run_job() -> int:
                     await refresh_models()
                     provider_models = models_for_provider(models_cache, provider_id)
                     models_available = (
-                        pick_model(provider_models, exhausted_ids=exhausted_tpd)
+                        pick_model(provider_models, exhausted_ids=exhausted_models)
                         is not None
                     )
                     if not models_available:
@@ -651,7 +730,7 @@ async def run_job() -> int:
                                     )
                                     model = pick_model(
                                         current,
-                                        exhausted_ids=exhausted_tpd,
+                                        exhausted_ids=exhausted_models,
                                     )
                                     if model is not None:
                                         est = estimate_tokens(
@@ -669,12 +748,12 @@ async def run_job() -> int:
                                         if not model_has_capacity(
                                             model,
                                             estimate=est,
-                                            exhausted_ids=exhausted_tpd,
+                                            exhausted_ids=exhausted_models,
                                         ):
                                             model = pick_model(
                                                 current,
                                                 estimate=est,
-                                                exhausted_ids=exhausted_tpd,
+                                                exhausted_ids=exhausted_models,
                                             )
 
                                 if model is None:
@@ -706,6 +785,7 @@ async def run_job() -> int:
                                     user_prompt=user_prompt,
                                     estimate=est,
                                     rate_limiter=rate_limiter,
+                                    provider_rate_limiter=provider_rate_limiter,
                                     token_minute_limiter=token_minute_limiter,
                                     bump_model_usage=bump_model_usage,
                                 )
@@ -739,13 +819,19 @@ async def run_job() -> int:
                                     provider_name,
                                 )
                                 return "ok"
-                            except DailyTokenExhausted as exc:
-                                exhausted_tpd.add(int(exc.model_id))
+                            except (DailyTokenExhausted, ModelRateLimited) as exc:
+                                exhausted_models.add(int(exc.model_id))
+                                reason = (
+                                    "TPD exhausted"
+                                    if isinstance(exc, DailyTokenExhausted)
+                                    else "RPM rate-limited"
+                                )
                                 logger.info(
-                                    "Agent id=%s deferred; model_id=%s TPD exhausted "
+                                    "Agent id=%s deferred; model_id=%s %s "
                                     "provider=%s",
                                     agent_id,
                                     exc.model_id,
+                                    reason,
                                     provider_name,
                                 )
                                 return "capacity"
@@ -796,7 +882,7 @@ async def run_job() -> int:
                     await refresh_models()
                     provider_models = models_for_provider(models_cache, provider_id)
                     models_available = (
-                        pick_model(provider_models, exhausted_ids=exhausted_tpd)
+                        pick_model(provider_models, exhausted_ids=exhausted_models)
                         is not None
                     )
                     if not models_available and batch_ok == 0 and capacity_hit:

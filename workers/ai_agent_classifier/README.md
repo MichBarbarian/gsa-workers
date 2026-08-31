@@ -31,13 +31,13 @@ Allowlist includes quality categories `Invalid Metadata` / `Insufficient Metadat
 
 Exit `0` when: queue empty, all provider workers hit daily request/token limits (no copies left), or `MAX_RUNTIME_SECONDS` reached.
 
-Rate limits: sliding-window hardcaps use `request_per_minute` and `tokens_per_minute` **per model**. Daily caps use `request_per_day` and `tokents_per_day` (column name as in DB; `NULL` TPD = request-only). HTTP 429 TPM is retried; 429 TPD skips that model for the rest of the run.
+Rate limits: sliding-window hardcaps use `request_per_minute` and `tokens_per_minute` **per model** (except **NVIDIA**: one shared account bucket via `ProviderRateLimiter`). Daily caps use `request_per_day` and `tokents_per_day` (column name as in DB; `NULL` TPD = request-only). HTTP 429 TPM is retried; 429 TPD or persistent RPM 429 skips that model for the rest of the run (agent stays pending, no `mark_error`). Failed 429s do not increment `models_requests`.
 
 Transient transport failures (`ConnectTimeout`, `ReadTimeout`, `ConnectError`, `ReadError`, `PoolTimeout`, `RemoteProtocolError`) are retried up to `LLM_MAX_ATTEMPTS` (4) with linear backoff instead of failing on the first drop. Connect timeout is short (`LLM_CONNECT_TIMEOUT_SECONDS`, 10s) so an unreachable endpoint fails fast and retries cheaply. Read/total timeout is **120s** (NIM MiniMax/Kimi can exceed 60s).
 
 API keys come from GitHub Secrets / env vars named by `llm.llm_provider.secret` (`GROQ`, `CEREBRAS`, `GEMINI`, `OPEN_ROUTER`, `TOKEN_ROUTER`, `NVIDIA`, `MISTRAL`, `CLOUDFLARE`). Endpoint from `llm.llm_provider.base_url`.
 
-**NVIDIA NIM (same key):** active slugs include `nvidia/nemotron-3-nano-30b-a3b` (first pick by `id`), then overflow `minimaxai/minimax-m3` and `moonshotai/kimi-k3` when Nemotron hits daily RPD. Account RPM ~40 is shared across those slugs.
+**NVIDIA NIM (same key):** active slugs include `nvidia/nemotron-3-nano-30b-a3b` (first pick by `id`), then overflow `minimaxai/minimax-m3` and `moonshotai/kimi-k3` when Nemotron hits daily RPD or is skipped for TPD/RPM. Account RPM ~40 is **shared across all slugs** — worker paces at `NVIDIA_ACCOUNT_RPM` (default 30) with `NVIDIA_CONCURRENCY=1`.
 
 ## Environment
 
@@ -54,6 +54,8 @@ API keys come from GitHub Secrets / env vars named by `llm.llm_provider.secret` 
 | `CLOUDFLARE` | required (for Cloudflare) | Workers AI API token (`llm.llm_provider.secret`); Account ID lives in `base_url` |
 | `CLAIM_BATCH_SIZE` | 20 | Agents claimed per loop **per provider worker** |
 | `CONCURRENCY` | 1 (local) / **2 in GHA** | Parallel LLM calls **per provider** (max 5; keep low for rpm) |
+| `NVIDIA_ACCOUNT_RPM` | 30 | Shared account RPM for provider NVIDIA (all NIM slugs) |
+| `NVIDIA_CONCURRENCY` | 1 | Parallel LLM calls **only** for NVIDIA lane |
 | `PROVIDERS` | all active | Optional comma filter of `llm.llm_provider.name` (e.g. `Groq,GEMINI`) |
 | `MAX_RUNTIME_SECONDS` | 19800 | Soft stop (~5.5h), shared across provider workers |
 
