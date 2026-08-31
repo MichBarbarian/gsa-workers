@@ -243,7 +243,7 @@ Hex / on-chain synthetic docs are **not** TTL-refreshed — subgraph import requ
 5. Categories include quality buckets `Invalid Metadata` / `Insufficient Metadata` and `Trading Bots` (product clones like Ave/Debot) vs semantic `Trading`.
 6. Increment `llm.models_requests` only on LLM calls; persist classification (incl. hash) or error columns; clear queue flag.
 
-Secrets: env name = `llm.llm_provider.secret` (Groq → `GROQ`, NVIDIA → `NVIDIA`, …). NVIDIA hosted NIM uses one key for Nemotron + MiniMax M3 + Kimi K3 (`pick_model` id-asc = Nemotron first). LLM HTTP read timeout **120s**.
+Secrets: env name = `llm.llm_provider.secret` (Groq → `GROQ`, NVIDIA → `NVIDIA`, …). NVIDIA hosted NIM uses one key for Nemotron + MiniMax M3 + Kimi K3 (`pick_model` id-asc = Nemotron first). **NVIDIA account RPM is shared** across slugs — worker paces via `ProviderRateLimiter` (`NVIDIA_ACCOUNT_RPM=30`, `NVIDIA_CONCURRENCY=1`); persistent RPM 429 skips model for the run without `mark_error`. LLM HTTP read timeout **120s**.
 
 ## Time budgets
 
