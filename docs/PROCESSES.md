@@ -71,7 +71,7 @@ flowchart TB
 
 | # | Process | Type | Schedule (UTC) | Queue / input | Persist via | Destination |
 |---|---|---|---|---|---|---|
-| 1 | [`wallet_nonce_balance_daily`](../workers/wallet_nonce_balance_daily/README.md) | Claim | 0/6/12/18 (matrix a/b) | `wallets` + daily flags | `wallet_apply_daily_snapshot` | `wallet_daily_metrics` (flat); rollup `wallet_rollup_daily_metrics` → `wallet_transactions` |
+| 1 | [`wallet_nonce_balance_daily`](../workers/wallet_nonce_balance_daily/README.md) | Claim | 6/12/18 (matrix a/b; no 00:00 — BD night window) | `wallets` + daily flags | `wallet_apply_daily_snapshot` | `wallet_daily_metrics` (flat); rollup `wallet_rollup_daily_metrics` → `wallet_transactions` |
 | 2 | [`owner_wallet_nonce_balance_monthly`](../workers/owner_wallet_nonce_balance_monthly/README.md) | Claim | 0/6/12/18 | monthly flags | `wallet_apply_monthly_snapshot` | `wallet_owner_details` |
 | 3 | [`owner_wallet_origin`](../workers/owner_wallet_origin/README.md) | Claim | 0/6/12/18 | history flags | `wallet_apply_owner_history_snapshot` | `wallet_owner_details.first_transaction_at` |
 | 4 | [`dune_queries_import`](../workers/dune_queries_import/README.md) | Reference | 18th 00:00 | Dune API (4 queries) | cex/mixer/bridge/ofac upserts (chunked) | `wallets.cex_addresses` + mixer/bridge/ofac tables |

@@ -4,6 +4,8 @@
 
 Batch job that queries native balance and nonce across 8 EVM chains for wallets in `erc_8004.wallets`, persists JSON results, and applies the daily snapshot inline (`wallet_daily_metrics` + `Processed` status). Does **not** update `wallet_transactions` until a rollup exists.
 
+**Schedule (UTC):** `6 / 12 / 18` only (window **06–24**). No `00:00` cron — leaves **00–06** for DB night pipelines (wallet TX rollup). Matrix `worker-a` / `worker-b` + `workflow_dispatch`.
+
 ## Eligibility (`import_nonce_and_balance_daily_next_eligible_at`)
 
 The worker claims wallets when:

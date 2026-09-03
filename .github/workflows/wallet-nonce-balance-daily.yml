@@ -2,7 +2,7 @@ name: Wallet nonce balance daily
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    # 06–24 UTC only: leave 00–06 free for DB rollup / dashboard night window
     - cron: "0 6 * * *"
     - cron: "0 12 * * *"
     - cron: "0 18 * * *"
