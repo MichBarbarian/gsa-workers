@@ -42,4 +42,4 @@ uv run python job.py
 uv run python scripts/smoke_providers.py
 ```
 
-Deploy schema first, then this worker. Cron: `0 0 1,15 * *` + `0 */4 * * *`.
+Deploy schema first, then this worker. Active UTC window **18:00→12:00** (closed 12–18). Cron: `0 0 1,15 * *` + `0 18,22,2,6,10 * * *`. Local outside window: `IGNORE_SCHEDULE_WINDOW=1`.
