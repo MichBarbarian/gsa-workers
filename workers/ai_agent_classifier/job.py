@@ -473,6 +473,9 @@ async def run_job() -> int:
         return 1
 
     claim_batch_size = env_int("CLAIM_BATCH_SIZE", default=20, minimum=1, maximum=200)
+    requeue_batch_size = env_int(
+        "REQUEUE_ERROR_BATCH_SIZE", default=1000, minimum=1, maximum=5000
+    )
     concurrency = env_int("CONCURRENCY", default=1, minimum=1, maximum=5)
     max_runtime_seconds = env_int("MAX_RUNTIME_SECONDS", default=19800, minimum=60)
     provider_filter = parse_provider_filter()
@@ -501,13 +504,6 @@ async def run_job() -> int:
         return 1
 
     allowed = set(categories)
-    try:
-        requeued = db.requeue_errors()
-    except Exception as exc:
-        logger.error("Failed to requeue prior errors: %s", exc)
-        db.close()
-        return 1
-
     start = time.monotonic()
     stats_lock = asyncio.Lock()
     processed = 0
@@ -578,12 +574,12 @@ async def run_job() -> int:
             resolve_api_key(str(model["provider_secret"]))
 
         logger.info(
-            "Started categories=%s system_prompt_chars=%s requeued_errors=%s "
-            "providers=%s claim_batch_size=%s concurrency_per_provider=%s "
-            "max_runtime=%ss",
+            "Started categories=%s system_prompt_chars=%s requeue_errors=lazy "
+            "requeue_batch_size=%s providers=%s claim_batch_size=%s "
+            "concurrency_per_provider=%s max_runtime=%ss",
             len(categories),
             len(system_prompt),
-            requeued,
+            requeue_batch_size,
             [pname for _, pname in providers],
             claim_batch_size,
             concurrency,
@@ -638,6 +634,24 @@ async def run_job() -> int:
                     async with db_lock:
                         try:
                             rows = db.claim_agents(limit=claim_batch_size)
+                            if not rows:
+                                try:
+                                    n = db.requeue_errors(limit=requeue_batch_size)
+                                except Exception as requeue_exc:
+                                    logger.warning(
+                                        "Provider %s requeue_errors failed; "
+                                        "treating queue as empty: %s",
+                                        provider_name,
+                                        requeue_exc,
+                                    )
+                                    n = 0
+                                if n > 0:
+                                    logger.info(
+                                        "Provider %s requeued prior errors batch=%s",
+                                        provider_name,
+                                        n,
+                                    )
+                                    rows = db.claim_agents(limit=claim_batch_size)
                         except Exception as exc:
                             logger.error(
                                 "Provider %s claim failed; retry: %s",

@@ -222,9 +222,9 @@ claim FOR UPDATE → one asyncio worker per llm provider → pick that provider'
 | Categories | `web_dashboard.agent_ai_categories` (`is_active`) |
 | Rate limit | `llm.models_requests` per model+date; rotate when `request_per_day` hit; NVIDIA uses shared account RPM (`NVIDIA_ACCOUNT_RPM=30`, `NVIDIA_CONCURRENCY=1`); exit 0 if all exhausted |
 | API key | env named by `llm.llm_provider.secret` (Groq: `GROQ`); `base_url` on provider |
-| NVIDIA models | Nemotron nano (first pick) + **MiniMax M3** + **Kimi K3** (overflow after Nemotron RPD/TPD/RPM skip); same secret `NVIDIA` |
+| NVIDIA models | **MiniMax M3** + **Kimi K3** (Nemotron nano off 2026-09-05 after HTTP 410); same secret `NVIDIA` |
 | LLM HTTP timeout | **120s** read (NIM MiniMax/Kimi often >60s); connect 10s |
-| Errors | flag `FALSE` + `has_ai_category_process_error` / `ai_category_process_error_message`; **requeued automatically at next job start** |
+| Errors | flag `FALSE` + `has_ai_category_process_error` / message; **lazy requeue ≤1000** when clean claim queue empty (`REQUEUE_ERROR_BATCH_SIZE`); index `idx_agents_ai_category_process_error` |
 | Workflow | `ai-agent-classifier.yml` |
 
 Worker README: [`ai_agent_classifier`](../workers/ai_agent_classifier/README.md).

@@ -20,6 +20,7 @@ WITH candidates AS (
   SELECT a.id
   FROM web_dashboard.agents a
   WHERE a.does_need_ai_category_process IS TRUE
+    AND COALESCE(a.has_ai_category_process_error, false) IS NOT TRUE
   ORDER BY a.id
   LIMIT %(limit)s
   FOR UPDATE OF a SKIP LOCKED
@@ -142,13 +143,22 @@ WHERE id = %(agent_id)s
 """
 
 REQUEUE_ERRORS_SQL = """
-UPDATE web_dashboard.agents
+WITH picked AS (
+  SELECT id
+  FROM web_dashboard.agents
+  WHERE has_ai_category_process_error IS TRUE
+  ORDER BY id
+  LIMIT %(limit)s
+  FOR UPDATE SKIP LOCKED
+)
+UPDATE web_dashboard.agents a
 SET
   does_need_ai_category_process = TRUE,
   has_ai_category_process_error = NULL,
   ai_category_process_error_message = NULL
-WHERE has_ai_category_process_error IS TRUE
-RETURNING id
+FROM picked
+WHERE a.id = picked.id
+RETURNING a.id
 """
 
 FETCH_MISSING_HASH_SQL = """
@@ -438,13 +448,15 @@ class Database:
 
         self._run_with_db_retry("mark_error", _mark)
 
-    def requeue_errors(self) -> int:
-        """Re-open agents left in error so the next claim loop can retry them."""
+    def requeue_errors(self, limit: int = 1000) -> int:
+        """Re-open up to `limit` sticky-error agents onto the claim queue."""
+
+        batch = max(1, min(int(limit), 5000))
 
         def _requeue() -> int:
             assert self._conn is not None
             with self._conn.cursor() as cur:
-                cur.execute(REQUEUE_ERRORS_SQL)
+                cur.execute(REQUEUE_ERRORS_SQL, {"limit": batch})
                 rows = list(cur.fetchall())
             self._conn.commit()
             return len(rows)

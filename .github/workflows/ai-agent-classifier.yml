@@ -62,6 +62,7 @@ jobs:
           NVIDIA_ACCOUNT_RPM: "30"
           NVIDIA_CONCURRENCY: "1"
           CLAIM_BATCH_SIZE: 20
+          REQUEUE_ERROR_BATCH_SIZE: 1000
           # Per-provider asyncio concurrency (2 helps drain Groq/Cerebras RPM).
           # Optional PROVIDERS filter: Groq,Cerebras,GEMINI,OpenRouter,TokenRouter,NVIDIA,Mistral,Cloudflare
         run: uv run python job.py

@@ -238,12 +238,12 @@ Hex / on-chain synthetic docs are **not** TTL-refreshed — subgraph import requ
 
 1. Load taxonomy from `agent_ai_categories` (`is_active`).
 2. Load providers/models for `llm.process.process_code='agent-classifier'`.
-3. Claim pending agents (`FOR UPDATE SKIP LOCKED`); single GHA concurrency group.
+3. Claim pending agents without sticky error (`FOR UPDATE SKIP LOCKED`); single GHA concurrency group. When clean queue empty: requeue up to `REQUEUE_ERROR_BATCH_SIZE` (1000) sticky errors, then claim again.
 4. Exact-match fingerprint (`ai_category_input_hash`); copy from an existing donor when inputs match; otherwise pick model and call OpenAI-compatible `{base_url}/chat/completions`.
 5. Categories include quality buckets `Invalid Metadata` / `Insufficient Metadata` and `Trading Bots` (product clones like Ave/Debot) vs semantic `Trading`.
 6. Increment `llm.models_requests` only on LLM calls; persist classification (incl. hash) or error columns; clear queue flag.
 
-Secrets: env name = `llm.llm_provider.secret` (Groq → `GROQ`, NVIDIA → `NVIDIA`, …). NVIDIA hosted NIM uses one key for Nemotron + MiniMax M3 + Kimi K3 (`pick_model` id-asc = Nemotron first). **NVIDIA account RPM is shared** across slugs — worker paces via `ProviderRateLimiter` (`NVIDIA_ACCOUNT_RPM=30`, `NVIDIA_CONCURRENCY=1`); persistent RPM 429 skips model for the run without `mark_error`. LLM HTTP read timeout **120s**.
+Secrets: env name = `llm.llm_provider.secret` (Groq → `GROQ`, NVIDIA → `NVIDIA`, …). NVIDIA hosted NIM uses one key for MiniMax M3 + Kimi K3 (Nemotron nano disabled 2026-09-05). **NVIDIA account RPM is shared** across slugs — worker paces via `ProviderRateLimiter` (`NVIDIA_ACCOUNT_RPM=30`, `NVIDIA_CONCURRENCY=1`); persistent RPM 429 skips model for the run without `mark_error`. LLM HTTP read timeout **120s**.
 
 ## Time budgets
 

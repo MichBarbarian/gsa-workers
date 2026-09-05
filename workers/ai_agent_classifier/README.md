@@ -8,18 +8,19 @@ Claim worker that classifies `web_dashboard.agents` into service categories usin
 
 ```sql
 does_need_ai_category_process IS TRUE
+AND COALESCE(has_ai_category_process_error, false) IS NOT TRUE
 ```
 
-Another process sets the flag to `TRUE`. This worker sets it `FALSE` on success or error.
+Another process sets the flag to `TRUE`. This worker sets it `FALSE` on success or error. Sticky errors (`has_ai_category_process_error`) stay off the claim queue until a lazy requeue batch reopens them.
 
 ## Pipeline
 
 1. Load active categories from `web_dashboard.agent_ai_categories`
 2. Load `llm.process.system_prompt` for `process_code = 'agent-classifier'` (editable in DB)
-3. Requeue prior errors (`has_ai_category_process_error`) back onto the claim queue
-4. Load active providers/models for that process
-5. Start **one asyncio worker per provider** (Groq / Cerebras / Gemini / OpenRouter, …); optional filter via `PROVIDERS`
-6. Each worker claims agents with `FOR UPDATE SKIP LOCKED` and only uses models from its provider
+3. Load active providers/models for that process (no full-error requeue at start)
+4. Start **one asyncio worker per provider** (Groq / Cerebras / Gemini / OpenRouter, …); optional filter via `PROVIDERS`
+5. Each worker claims agents with `FOR UPDATE SKIP LOCKED` and only uses models from its provider
+6. When the clean claim queue is empty: requeue up to `REQUEUE_ERROR_BATCH_SIZE` (default **1000**) sticky errors onto the pending queue, then claim again; if requeue returns 0, exit that provider
 7. Fingerprint prompt inputs (`ai_category_input_hash`); if another agent already classified the same inputs, **copy** categories and skip the LLM
 8. Else pick a model from that provider with remaining daily capacity (`request_total` / `token_total` vs day caps)
 9. Call `{base_url}/chat/completions` with provider params (`temperature`, `max_completion_tokens`, `response_format`); if `llm.models.does_need_thinking_off_parameter` then also `reasoning_effort=none` (plus `clear_thinking=false` only for Cerebras). Cloudflare Workers AI also sends `cf-aig-gateway-id: default`.
@@ -37,7 +38,7 @@ Transient transport failures (`ConnectTimeout`, `ReadTimeout`, `ConnectError`, `
 
 API keys come from GitHub Secrets / env vars named by `llm.llm_provider.secret` (`GROQ`, `CEREBRAS`, `GEMINI`, `OPEN_ROUTER`, `TOKEN_ROUTER`, `NVIDIA`, `MISTRAL`, `CLOUDFLARE`). Endpoint from `llm.llm_provider.base_url`.
 
-**NVIDIA NIM (same key):** active slugs include `nvidia/nemotron-3-nano-30b-a3b` (first pick by `id`), then overflow `minimaxai/minimax-m3` and `moonshotai/kimi-k3` when Nemotron hits daily RPD or is skipped for TPD/RPM. Account RPM ~40 is **shared across all slugs** — worker paces at `NVIDIA_ACCOUNT_RPM` (default 30) with `NVIDIA_CONCURRENCY=1`.
+**NVIDIA NIM (same key):** overflow slugs `minimaxai/minimax-m3` and `moonshotai/kimi-k3` (Nemotron nano disabled 2026-09-05 after HTTP 410 Gone). Account RPM ~40 is **shared across all slugs** — worker paces at `NVIDIA_ACCOUNT_RPM` (default 30) with `NVIDIA_CONCURRENCY=1`.
 
 ## Environment
 
@@ -53,6 +54,7 @@ API keys come from GitHub Secrets / env vars named by `llm.llm_provider.secret` 
 | `MISTRAL` | required (for Mistral) | La Plateforme / AI Studio key (`llm.llm_provider.secret`) |
 | `CLOUDFLARE` | required (for Cloudflare) | Workers AI API token (`llm.llm_provider.secret`); Account ID lives in `base_url` |
 | `CLAIM_BATCH_SIZE` | 20 | Agents claimed per loop **per provider worker** |
+| `REQUEUE_ERROR_BATCH_SIZE` | 1000 | Sticky errors reopened per lazy requeue when clean queue is empty (max 5000) |
 | `CONCURRENCY` | 1 (local) / **2 in GHA** | Parallel LLM calls **per provider** (max 5; keep low for rpm) |
 | `NVIDIA_ACCOUNT_RPM` | 30 | Shared account RPM for provider NVIDIA (all NIM slugs) |
 | `NVIDIA_CONCURRENCY` | 1 | Parallel LLM calls **only** for NVIDIA lane |

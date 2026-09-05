@@ -216,6 +216,7 @@ Synthetic on-chain URI: `internal_on_chain_id_{feedback_id}`, `source='on_chain'
 | `llm.procees_llm_providers` | Links `process_code='agent-classifier'` → providers |
 
 Partial index: `idx_agents_pending_ai_category` (`WHERE does_need_ai_category_process IS TRUE`).
+Partial error index: `idx_agents_ai_category_process_error` (`WHERE has_ai_category_process_error IS TRUE`) — lazy requeue batches (≤1000).
 Partial donor index: `idx_agents_ai_category_input_hash_donors` (`ai_category_input_hash` where classified OK).
 
 Backfill hashes after column deploy (same fingerprint as worker):
@@ -656,12 +657,18 @@ JOIN llm.models m ON m.id = mr.model_id
 WHERE mr.date = CURRENT_DATE
 ORDER BY m.id;
 
--- Re-queue errors (also done automatically at classifier job start)
--- UPDATE web_dashboard.agents
+-- Lazy requeue errors (worker does this when clean claim queue is empty; batch ≤1000)
+-- Script: gsa-supabase-schema/supabase/scripts/requeue_ai_category_process_errors.sql
+-- WITH picked AS (
+--   SELECT id FROM web_dashboard.agents
+--   WHERE has_ai_category_process_error IS TRUE
+--   ORDER BY id LIMIT 1000 FOR UPDATE SKIP LOCKED
+-- )
+-- UPDATE web_dashboard.agents a
 -- SET does_need_ai_category_process = TRUE,
 --     has_ai_category_process_error = NULL,
 --     ai_category_process_error_message = NULL
--- WHERE has_ai_category_process_error IS TRUE;
+-- FROM picked WHERE a.id = picked.id;
 
 -- After changing classifier system prompt / taxonomy: wipe results + hashes and requeue
 -- (script: gsa-supabase-schema/supabase/scripts/reset_ai_category_for_prompt_refresh.sql)
