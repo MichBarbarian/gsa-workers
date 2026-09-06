@@ -32,6 +32,9 @@ logger = logging.getLogger("wallet_activity_flows")
 
 CLAIMED_BY_PREFIX = "wallet_activity_flows/gha"
 XLAYER_RPC = "https://rpc.xlayer.tech"
+# Active UTC hours: [18, 24) U [0, 12). Closed [12, 18).
+SCHEDULE_WINDOW_START_HOUR = 18
+SCHEDULE_WINDOW_END_HOUR = 12
 
 
 def env_int(name: str, default: int, minimum: int = 1, maximum: int | None = None) -> int:
@@ -52,6 +55,18 @@ def env_str(name: str, default: str = "") -> str:
     if raw is None or raw.strip() == "":
         return default
     return raw.strip()
+
+
+def ignore_schedule_window() -> bool:
+    return env_str("IGNORE_SCHEDULE_WINDOW", "").lower() in ("1", "true", "yes")
+
+
+def in_schedule_window(now: datetime | None = None) -> bool:
+    """True during UTC 18:00→12:00 (cross-midnight); false during 12:00–18:00."""
+    if ignore_schedule_window():
+        return True
+    hour = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).hour
+    return hour >= SCHEDULE_WINDOW_START_HOUR or hour < SCHEDULE_WINDOW_END_HOUR
 
 
 def build_claimed_by(worker_suffix: str) -> str:
@@ -189,6 +204,14 @@ async def run_job() -> int:
         logger.error("SUPABASE_DB_URL is required")
         return 1
 
+    now_utc = datetime.now(timezone.utc)
+    if not in_schedule_window(now_utc):
+        logger.info(
+            "Outside UTC schedule window 18:00→12:00 (hour=%s); exiting",
+            now_utc.hour,
+        )
+        return 0
+
     group = env_str("PROVIDER_GROUP", "etherscan")
     if group not in GROUP_EVM_IDS:
         logger.error("PROVIDER_GROUP must be one of %s", ",".join(GROUP_EVM_IDS))
@@ -210,7 +233,6 @@ async def run_job() -> int:
 
     db = Database(dsn)
     db.connect()
-    now_utc = datetime.now(timezone.utc)
     logger.info(
         "Started claimed_by=%s group=%s evm_ids=%s claim_batch=%s max_runtime=%ss",
         claimed_by,
@@ -254,6 +276,15 @@ async def run_job() -> int:
                     logger.info(
                         "Time budget reached (%.0fs). processed=%s completed=%s errors=%s",
                         elapsed,
+                        processed,
+                        completed,
+                        errors,
+                    )
+                    return 0
+                if not in_schedule_window():
+                    logger.info(
+                        "UTC schedule window closed (12:00–18:00). "
+                        "processed=%s completed=%s errors=%s",
                         processed,
                         completed,
                         errors,

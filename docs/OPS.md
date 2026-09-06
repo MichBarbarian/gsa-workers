@@ -153,7 +153,7 @@ Monitoring SQL: [SUPABASE.md](./SUPABASE.md) (Agent URI sections). READMEs: [`ag
 
 One-shot ingest of the first ~500 **incoming** native+ERC-20 transfers (`workers/wallet_funding_transfers`). Claims `erc_8004.wallet_transactions` (`is_valid_funding_transfers`). Success sets `funding_transfers_next_eligible_at = infinity`. Empty wallet still completes. Does **not** write `walcert.wallet_fund_origins`.
 
-Matrix groups: `etherscan` · `blockscout` · `bsc` · `xlayer`. Active UTC window **06:00→24:00** (cron `0 6,12,18 * * *`; closed 00–06 for DB night processing) + `workflow_dispatch`.
+Matrix groups: `etherscan` · `blockscout` · `bsc` · `xlayer`. Active UTC window **18:00→12:00** (cron `0 18,0,6 * * *`; closed 12–18) + `workflow_dispatch`.
 
 | Log line | Meaning |
 |---|---|
