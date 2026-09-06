@@ -2,24 +2,14 @@ name: Wallet activity flows 15d
 
 on:
   schedule:
-    # Cuts at 06:00 UTC on days 1 and 15 (inside 06–24 window; leave 00–06 for DB).
-    - cron: "0 6 1,15 * *"
-    # Drain only in UTC window 06:00→24:00 (~every 4h). Closed 00:00–06:00.
-    - cron: "0 6,10,14,18,22 * * *"
+    - cron: "0 0 1,15 * *"
+    - cron: "0 */4 * * *"
   workflow_dispatch:
     inputs:
       provider_group:
         description: "etherscan | alchemy_k1 | bsc | xlayer (empty = all matrix cells)"
         required: false
         default: ""
-      ignore_schedule_window:
-        description: "Set true to run outside UTC 06:00→24:00 window"
-        required: false
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
 
 jobs:
   run:
@@ -37,22 +27,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Maybe skip matrix cell or closed UTC window
+      - name: Maybe skip unused matrix cell
         id: gate
         shell: bash
         env:
           ONLY: ${{ github.event.inputs.provider_group }}
           CELL: ${{ matrix.group }}
-          IGNORE_WINDOW: ${{ github.event.inputs.ignore_schedule_window }}
         run: |
           if [ -n "$ONLY" ] && [ "$ONLY" != "$CELL" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          hour=$(date -u +%H)
-          hour=$((10#$hour))
-          if [ "$IGNORE_WINDOW" != "true" ] && [ "$hour" -lt 6 ]; then
-            echo "Outside UTC window 06:00→24:00 (hour=${hour}); skip"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -93,5 +75,4 @@ jobs:
           CLAIM_BATCH_SIZE: 20
           CLAIM_STALE_SECONDS: 7200
           WORKER_ID: ${{ matrix.group }}
-          IGNORE_SCHEDULE_WINDOW: ${{ github.event.inputs.ignore_schedule_window || 'false' }}
         run: uv run python job.py
