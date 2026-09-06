@@ -2,8 +2,8 @@ name: Wallet funding transfers
 
 on:
   schedule:
-    # Drain only in UTC window 18:00→12:00 (was every 6h incl. 12:00). Closed 12:00–18:00.
-    - cron: "0 18,0,6 * * *"
+    # Drain only in UTC window 06:00→24:00 (was every 6h incl. 00:00). Closed 00:00–06:00.
+    - cron: "0 6,12,18 * * *"
   workflow_dispatch:
     inputs:
       provider_group:
@@ -11,7 +11,7 @@ on:
         required: false
         default: ""
       ignore_schedule_window:
-        description: "Set true to run outside UTC 18:00→12:00 window"
+        description: "Set true to run outside UTC 06:00→24:00 window"
         required: false
         default: "false"
         type: choice
@@ -49,8 +49,8 @@ jobs:
           fi
           hour=$(date -u +%H)
           hour=$((10#$hour))
-          if [ "$IGNORE_WINDOW" != "true" ] && [ "$hour" -ge 12 ] && [ "$hour" -lt 18 ]; then
-            echo "Outside UTC window 18:00→12:00 (hour=${hour}); skip"
+          if [ "$IGNORE_WINDOW" != "true" ] && [ "$hour" -lt 6 ]; then
+            echo "Outside UTC window 06:00→24:00 (hour=${hour}); skip"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"

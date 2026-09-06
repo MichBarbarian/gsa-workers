@@ -35,9 +35,8 @@ CLAIMED_BY_PREFIX = "wallet_funding_transfers/gha"
 GENESIS = datetime(2015, 7, 30, tzinfo=timezone.utc)
 CLAIM_RETRY_BASE_SECONDS = 2.0
 XLAYER_RPC = "https://rpc.xlayer.tech"
-# Active UTC hours: [18, 24) U [0, 12). Closed [12, 18).
-SCHEDULE_WINDOW_START_HOUR = 18
-SCHEDULE_WINDOW_END_HOUR = 12
+# Active UTC hours: [6, 24). Closed [0, 6) for DB night processing.
+SCHEDULE_WINDOW_START_HOUR = 6
 
 
 def env_int(name: str, default: int, minimum: int = 1, maximum: int | None = None) -> int:
@@ -65,11 +64,11 @@ def ignore_schedule_window() -> bool:
 
 
 def in_schedule_window(now: datetime | None = None) -> bool:
-    """True during UTC 18:00→12:00 (cross-midnight); false during 12:00–18:00."""
+    """True during UTC 06:00→24:00; false during 00:00–06:00 (DB night window)."""
     if ignore_schedule_window():
         return True
     hour = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).hour
-    return hour >= SCHEDULE_WINDOW_START_HOUR or hour < SCHEDULE_WINDOW_END_HOUR
+    return hour >= SCHEDULE_WINDOW_START_HOUR
 
 
 def build_claimed_by(worker_suffix: str) -> str:
@@ -169,7 +168,7 @@ async def run_job() -> int:
     now_utc = datetime.now(timezone.utc)
     if not in_schedule_window(now_utc):
         logger.info(
-            "Outside UTC schedule window 18:00→12:00 (hour=%s); exiting",
+            "Outside UTC schedule window 06:00→24:00 (hour=%s); exiting",
             now_utc.hour,
         )
         return 0
@@ -239,7 +238,7 @@ async def run_job() -> int:
                     return 0
                 if not in_schedule_window():
                     logger.info(
-                        "UTC schedule window closed (12:00–18:00). "
+                        "UTC schedule window closed (00:00–06:00). "
                         "processed=%s completed=%s errors=%s",
                         processed,
                         completed,

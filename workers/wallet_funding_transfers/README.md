@@ -32,6 +32,6 @@ $env:PROVIDER_GROUP="etherscan"
 uv run python job.py
 ```
 
-Schema applied in prod 2026-08-26. Active UTC window **18:00→12:00** (closed 12–18). Cron: `0 18,0,6 * * *` UTC + `workflow_dispatch`. Local outside window: `IGNORE_SCHEDULE_WINDOW=1`.
+Schema applied in prod 2026-08-26. Active UTC window **06:00→24:00** (closed 00–06 for DB night processing). Cron: `0 6,12,18 * * *` UTC + `workflow_dispatch`. Local outside window: `IGNORE_SCHEDULE_WINDOW=1`.
 
 Monitoring SQL: [docs/SUPABASE.md](../../docs/SUPABASE.md#funding-transfers-first-inflows). Ops: [docs/OPS.md](../../docs/OPS.md). Do not revive Walcert Alchemy fund-origins Edge ([DEPRECATION.md](../../docs/DEPRECATION.md)).

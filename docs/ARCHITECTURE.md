@@ -80,8 +80,8 @@ stateDiagram-v2
 | `wallet_token_contracts_discovery` | `wallet-token-contracts-discovery.yml` | `wallet-token-contracts-discovery` | 1 runner |
 | `wallet_token_portfolio_discovery` | `wallet-token-portfolio-discovery.yml` | `wallet-token-portfolio-discovery` | 1 runner |
 | `wallet_lp_positions_discovery` | `wallet-lp-positions-discovery.yml` | `wallet-lp-positions-discovery` | 1 runner |
-| `wallet_activity_flows` | `wallet-activity-flows.yml` | per provider group | etherscan / alchemy_k1 / bsc / xlayer; `max-parallel: 4`; UTC window 18→12 (cuts 1/15 + drain 18,22,2,6,10) |
-| `wallet_funding_transfers` | `wallet-funding-transfers.yml` | per provider group | etherscan / blockscout / bsc / xlayer; `max-parallel: 4`; UTC window 18→12 (drain 18,0,6) |
+| `wallet_activity_flows` | `wallet-activity-flows.yml` | per provider group | etherscan / alchemy_k1 / bsc / xlayer; `max-parallel: 4`; UTC window 06→24 (cuts 1/15 06:00 + drain 6,10,14,18,22) |
+| `wallet_funding_transfers` | `wallet-funding-transfers.yml` | per provider group | etherscan / blockscout / bsc / xlayer; `max-parallel: 4`; UTC window 06→24 (drain 6,12,18) |
 | `agent_uri_resolve` | `agent-uri-resolve.yml` | `agent-uri-resolve` | 1 runner (00:00 / 12:00) |
 | `agent_uri_reprocess` | `agent-uri-reprocess.yml` | `agent-uri-reprocess` | 1 runner (06:00 / 18:00) |
 | `ai_agent_classifier` | `ai-agent-classifier.yml` | `ai-agent-classifier` | 1 runner (0/6/12/18) |
@@ -93,8 +93,8 @@ Dune queries import schedule: `0 0 18 * *` UTC + `workflow_dispatch` (18th month
 Token prices import schedule: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
 URI resolve: `0 0,12 * * *`; URI reprocess: `0 6,18 * * *` (split cadence by design).  
 AI classifier: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
-Activity flows 15d: UTC window **18:00→12:00** — `0 0 1,15 * *` + `0 18,22,2,6,10 * * *` (+ soft-stop); closed 12–18.  
-Funding transfers: UTC window **18:00→12:00** — `0 18,0,6 * * *` (+ soft-stop); closed 12–18.  
+Activity flows 15d: UTC window **06:00→24:00** — `0 6 1,15 * *` + `0 6,10,14,18,22 * * *` (+ soft-stop); closed 00–06 for DB night processing.  
+Funding transfers: UTC window **06:00→24:00** — `0 6,12,18 * * *` (+ soft-stop); closed 00–06.  
 Endpoint liveness 15d: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.  
 Ethos reviews API: `0 0,6,12,18 * * *` UTC + `workflow_dispatch`.
 
