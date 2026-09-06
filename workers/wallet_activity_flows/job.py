@@ -292,12 +292,14 @@ async def run_job() -> int:
                     return 0
 
                 try:
+                    claim_t0 = time.monotonic()
                     batch = db.claim_rows(
                         claimed_by,
                         claim_batch_size,
                         claim_stale_seconds,
                         evm_ids,
                     )
+                    claim_ms = (time.monotonic() - claim_t0) * 1000.0
                 except Exception:
                     logger.exception("Claim failed; retrying")
                     await asyncio.sleep(CLAIM_RETRY_BASE_SECONDS)
@@ -305,14 +307,19 @@ async def run_job() -> int:
 
                 if not batch:
                     logger.info(
-                        "Queue empty. processed=%s completed=%s errors=%s",
+                        "Queue empty. processed=%s completed=%s errors=%s claim_ms=%.0f",
                         processed,
                         completed,
                         errors,
+                        claim_ms,
                     )
                     return 0
 
-                logger.info("Claimed batch size=%s", len(batch))
+                logger.info(
+                    "Claimed batch size=%s claim_ms=%.0f",
+                    len(batch),
+                    claim_ms,
+                )
                 now = datetime.now(timezone.utc)
                 for row in batch:
                     processed += 1
@@ -329,14 +336,17 @@ async def run_job() -> int:
                             okx=okx,
                             now=now,
                         )
+                        save_t0 = time.monotonic()
                         msg = db.insert_and_mark_done(row_id, transfers)
+                        save_ms = (time.monotonic() - save_t0) * 1000.0
                         completed += 1
                         logger.info(
-                            "Done wt_id=%s wallet_id=%s chain=%s rows=%s %s",
+                            "Done wt_id=%s wallet_id=%s chain=%s rows=%s save_ms=%.0f %s",
                             row_id,
                             row["wallet_id"],
                             row["evm_chain_id"],
                             len(transfers),
+                            save_ms,
                             msg,
                         )
                     except Exception as exc:

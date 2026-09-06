@@ -16,7 +16,7 @@ logger = logging.getLogger("wallet_activity_flows")
 
 CLAIM_ROWS_SQL = """
 WITH rough AS MATERIALIZED (
-  SELECT wt.id, wt.wallet_id, wt.activity_flows_next_eligible_at
+  SELECT wt.id, wt.wallet_id
   FROM erc_8004.wallet_transactions wt
   JOIN erc_8004.chains c ON c.id = wt.chain_id
   WHERE c.chain_id = ANY(%(evm_ids)s)
@@ -29,11 +29,10 @@ WITH rough AS MATERIALIZED (
       OR wt.activity_flows_claimed_at
            < NOW() - make_interval(secs => %(stale_seconds)s)
     )
-  ORDER BY wt.activity_flows_next_eligible_at, wt.id
   LIMIT GREATEST(%(limit)s * 5, %(limit)s)
 ),
 filtered AS MATERIALIZED (
-  SELECT r.id, r.activity_flows_next_eligible_at
+  SELECT r.id
   FROM rough r
   WHERE EXISTS (
     SELECT 1
@@ -45,14 +44,12 @@ filtered AS MATERIALIZED (
       AND awt.is_valid
       AND awt.deleted_at IS NULL
   )
-  ORDER BY r.activity_flows_next_eligible_at, r.id
   LIMIT %(limit)s
 ),
 candidates AS (
   SELECT wt.id
   FROM erc_8004.wallet_transactions wt
   JOIN filtered f ON f.id = wt.id
-  ORDER BY f.activity_flows_next_eligible_at, wt.id
   FOR UPDATE OF wt SKIP LOCKED
 ),
 updated AS (
