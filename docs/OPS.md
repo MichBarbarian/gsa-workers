@@ -149,6 +149,21 @@ URI workers claim agents / feedbacks / `agent_manifest` / `uri_documents` (not w
 
 Monitoring SQL: [SUPABASE.md](./SUPABASE.md) (Agent URI sections). READMEs: [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md), [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md).
 
+## Wallet activity flows 15d
+
+Staging ingest into `wallets.wallet_activity_transfers` (`workers/wallet_activity_flows`). Claims `erc_8004.wallet_transactions` with `activity_flows_agent_ok` (no per-claim `EXISTS`). Soft-stop outside the window.
+
+Matrix groups: `etherscan` · `alchemy_k1` · `bsc` · `xlayer`. Active UTC window **18:00→12:00** (cuts `0 0 1,15 * *` + drain `0 18,22,2,6,10 * * *`; closed 12–18) + `workflow_dispatch` (`ignore_schedule_window`).
+
+| Log line | Meaning |
+|---|---|
+| `Claimed batch size=… claim_ms=` | Claim tick latency (GHA→Postgres) |
+| `Done wt_id=… save_ms=` | Mark-done / INSERT latency |
+| `UTC schedule window closed` | Soft-stop at 12:00 UTC |
+| `Queue empty` | Cell finished; exit 0 |
+
+Monitoring SQL: [SUPABASE.md](./SUPABASE.md) (Activity flows section). README: [`wallet_activity_flows`](../workers/wallet_activity_flows/README.md).
+
 ## Wallet funding transfers
 
 One-shot ingest of the first ~500 **incoming** native+ERC-20 transfers (`workers/wallet_funding_transfers`). Claims `erc_8004.wallet_transactions` (`is_valid_funding_transfers`). Success sets `funding_transfers_next_eligible_at = infinity`. Empty wallet still completes. Does **not** write `walcert.wallet_fund_origins`.
@@ -214,9 +229,9 @@ Deploy order when both change: **schema → worker → workflow_dispatch**.
 
 ## Related
 
-- [PROCESSES.md](./PROCESSES.md) — live pipeline catalog (#9b funding transfers, #13 on-demand, **#16 Ethos reviews API**)
+- [PROCESSES.md](./PROCESSES.md) — live pipeline catalog (#9 activity flows, #9b funding transfers, #13 on-demand, **#16 Ethos reviews API**)
 - [PENDING_LP_POSITIONS.md](./PENDING_LP_POSITIONS.md) — LP 15-day refresh (discovery already live)
 - [SUPABASE.md](./SUPABASE.md) — monitoring and backfill SQL
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — pipeline and budgets
 - [DEPRECATION.md](./DEPRECATION.md) — do not re-enable old crons / Edge URI
-- Workers: [`wallet_lp_positions_discovery`](../workers/wallet_lp_positions_discovery/README.md), [`wallet_funding_transfers`](../workers/wallet_funding_transfers/README.md), [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md), [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md), [`ethos_reviews_api`](../workers/ethos_reviews_api/README.md)
+- Workers: [`wallet_activity_flows`](../workers/wallet_activity_flows/README.md), [`wallet_lp_positions_discovery`](../workers/wallet_lp_positions_discovery/README.md), [`wallet_funding_transfers`](../workers/wallet_funding_transfers/README.md), [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md), [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md), [`ethos_reviews_api`](../workers/ethos_reviews_api/README.md)

@@ -120,7 +120,7 @@ Trigger `trg_wallet_transactions_lp_flag_bu` sets LP pending when portfolio disc
 | `activity_flows_completed_at` | Last successful ingest (empty window still counts) |
 | `has_activity_flows_error` / `activity_flows_message_error` | Last failure (requeue +1h) |
 
-Eligibility: `is_valid_activity_flows` + `activity_flows_agent_ok` + due clock + `wallet_category NOT LIKE 'Dormant_%'`. Index: `idx_wallet_transactions_activity_flows_claim`. No FIFO `ORDER BY` on claim (full-set 15d drain).
+Eligibility: `is_valid_activity_flows` + `activity_flows_agent_ok` + due clock + `wallet_category NOT LIKE 'Dormant_%'`. Index: `idx_wallet_transactions_activity_flows_claim`. No FIFO `ORDER BY` on claim (full-set 15d drain). Schedule: UTC window **18:00→12:00** (closed 12–18).
 
 ```sql
 SELECT
@@ -135,6 +135,7 @@ SELECT
   ) AS non_dormant,
   count(*) FILTER (
     WHERE is_valid_activity_flows IS TRUE
+      AND activity_flows_agent_ok IS TRUE
       AND activity_flows_next_eligible_at IS NOT NULL
       AND activity_flows_next_eligible_at <= NOW()
       AND COALESCE(wallet_category, '') NOT LIKE 'Dormant_%'
@@ -146,7 +147,7 @@ FROM erc_8004.wallet_transactions;
 
 `dormant` rises and `non_dormant` falls as `wallet_tx_rollup` reclassifies — expected. Baseline 2026-08-13: seeded 294 948 / dormant 77 159 / non_dormant 217 789. Same snapshot is required in skill `gsa-worker-health`. Through 2026-08-31 UTC leftover BSC due rows drain via Alchemy key_2 (Ankr Freemium exhausted 2026-08-24).
 
-Staging table: `wallets.wallet_activity_transfers` via `wallets.wallet_activity_transfers_insert`. PK `(wallet_id, chain_id, unique_id)`. `chain_id` is `erc_8004.chains.id`. Migration: `20260813010000_wallet_activity_transfers.sql`. Schema doc: `gsa-supabase-schema/supabase/docs/wallet-activity-transfers.md`.
+Staging table: `wallets.wallet_activity_transfers` via `wallets.wallet_activity_transfers_insert`. PK `(wallet_id, chain_id, unique_id)`. `chain_id` is `erc_8004.chains.id`. Migrations: `20260813010000_wallet_activity_transfers.sql`, `20260906060059_activity_flows_agent_ok_claim.sql`. Schema doc: `gsa-supabase-schema/supabase/docs/wallet-activity-transfers.md`.
 
 ### Funding transfers (first inflows)
 
@@ -318,6 +319,7 @@ When `is_valid_*` becomes true, DB triggers set the matching `next_eligible_at` 
 - `trg_wallet_transactions_portfolio_flag_bu` (sets `does_need_portfolio_discovery` when contract discovery completes)
 - `trg_wallet_transactions_lp_flag_bu` (sets `does_need_lp_discovery` when portfolio discovery completes)
 - `trg_wallet_transactions_activity_flows_bi` (sets `is_valid_activity_flows` + `-infinity` clock on insert for mapped EVM chains)
+- `trg_awt_refresh_activity_flows_agent_ok` / `trg_agents_refresh_activity_flows_agent_ok` (keep `activity_flows_agent_ok` in sync)
 
 ## Claim pattern
 

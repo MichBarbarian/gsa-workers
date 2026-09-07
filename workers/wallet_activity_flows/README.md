@@ -4,7 +4,7 @@
 `wallets.wallet_activity_transfers`. Does not compute Walcert metrics or delete staging.
 
 **Workflow:** `.github/workflows/wallet-activity-flows.yml`  
-**Schema:** `gsa-supabase-schema` `20260813010000_wallet_activity_transfers.sql`
+**Schema:** `gsa-supabase-schema` `20260813010000_wallet_activity_transfers.sql` + `20260906060059_activity_flows_agent_ok_claim.sql`
 
 ## Providers
 
