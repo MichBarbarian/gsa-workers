@@ -17,7 +17,7 @@
 
 ## Claim
 
-`is_valid_activity_flows` + `activity_flows_next_eligible_at <= now()` + `wallet_category NOT LIKE 'Dormant_%'` + valid agent. Success → next UTC cut (day 15 or day 1 next month). Empty queue → exit 0.
+`is_valid_activity_flows` + `activity_flows_agent_ok` + `activity_flows_next_eligible_at <= now()` + `wallet_category NOT LIKE 'Dormant_%'`. Success → next UTC cut (day 15 or day 1 next month). Empty queue → exit 0.
 
 ## Secrets (GHA)
 

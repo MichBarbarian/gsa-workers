@@ -114,12 +114,13 @@ Trigger `trg_wallet_transactions_lp_flag_bu` sets LP pending when portfolio disc
 | Column | Role |
 |---|---|
 | `is_valid_activity_flows` | Chain is in the 15d map (ETH, Arb, Polygon, Celo, Base, Gnosis, BSC, X Layer) |
+| `activity_flows_agent_ok` | Denormalized valid-agent gate (`agent_wallet_tx` × `agents.valid`). Triggers keep it fresh; claim uses this instead of EXISTS |
 | `activity_flows_next_eligible_at` | Claim clock. Success → next UTC cut (day 15 00:00, or day 1 next month). New inserts `-infinity` via BI |
 | `activity_flows_claimed_at` / `claimed_by` | Soft lock (`CLAIM_STALE_SECONDS`) |
 | `activity_flows_completed_at` | Last successful ingest (empty window still counts) |
 | `has_activity_flows_error` / `activity_flows_message_error` | Last failure (requeue +1h) |
 
-Eligibility: `is_valid_activity_flows` + due clock + `wallet_category NOT LIKE 'Dormant_%'` + valid agent via `agent_wallet_tx`.
+Eligibility: `is_valid_activity_flows` + `activity_flows_agent_ok` + due clock + `wallet_category NOT LIKE 'Dormant_%'`. Index: `idx_wallet_transactions_activity_flows_claim`. No FIFO `ORDER BY` on claim (full-set 15d drain).
 
 ```sql
 SELECT

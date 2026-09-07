@@ -15,12 +15,13 @@ from psycopg.rows import dict_row
 logger = logging.getLogger("wallet_activity_flows")
 
 CLAIM_ROWS_SQL = """
-WITH rough AS MATERIALIZED (
-  SELECT wt.id, wt.wallet_id
+WITH candidates AS (
+  SELECT wt.id
   FROM erc_8004.wallet_transactions wt
   JOIN erc_8004.chains c ON c.id = wt.chain_id
   WHERE c.chain_id = ANY(%(evm_ids)s)
     AND wt.is_valid_activity_flows IS TRUE
+    AND wt.activity_flows_agent_ok IS TRUE
     AND wt.activity_flows_next_eligible_at IS NOT NULL
     AND wt.activity_flows_next_eligible_at <= NOW()
     AND COALESCE(wt.wallet_category, '') NOT LIKE 'Dormant_%%'
@@ -29,27 +30,7 @@ WITH rough AS MATERIALIZED (
       OR wt.activity_flows_claimed_at
            < NOW() - make_interval(secs => %(stale_seconds)s)
     )
-  LIMIT GREATEST(%(limit)s * 5, %(limit)s)
-),
-filtered AS MATERIALIZED (
-  SELECT r.id
-  FROM rough r
-  WHERE EXISTS (
-    SELECT 1
-    FROM erc_8004.agent_wallet_tx awt
-    JOIN erc_8004.agents a
-      ON a.id = awt.agent_id
-     AND a.validation_realness_status = 'valid'
-    WHERE awt.wallet_id = r.wallet_id
-      AND awt.is_valid
-      AND awt.deleted_at IS NULL
-  )
   LIMIT %(limit)s
-),
-candidates AS (
-  SELECT wt.id
-  FROM erc_8004.wallet_transactions wt
-  JOIN filtered f ON f.id = wt.id
   FOR UPDATE OF wt SKIP LOCKED
 ),
 updated AS (
