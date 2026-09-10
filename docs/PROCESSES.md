@@ -79,7 +79,7 @@ flowchart TB
 | 6 | [`wallet_token_portfolio_discovery`](../workers/wallet_token_portfolio_discovery/README.md) | Claim (`wallet_transactions`) | 0/6/12/18 | `does_need_portfolio_discovery` | `wallet_token_positions_insert` | `wallets.wallet_token_positions` (wallet fungibles) |
 | 7 | [`token_prices_import`](../workers/token_prices_import/README.md) | Reference | 0/6/12/18 | unpriced ERC-20s (`has_price_error`) | `token_prices_upsert` + `apply_prices` + `mark_price_misses` | `token_prices` → positions |
 | 8 | [`wallet_lp_positions_discovery`](../workers/wallet_lp_positions_discovery/README.md) | Claim (`wallet_transactions`) | 0/6/12/18 | `does_need_lp_discovery` | `wallet_lp_positions_upsert` | `wallets.wallet_lp_positions` |
-| 9 | [`wallet_activity_flows`](../workers/wallet_activity_flows/README.md) | Claim (`wallet_transactions`, matrix 4) | UTC window **18:00→12:00**: cuts 1/15 00:00 + drain `18,22,2,6,10`; closed 12–18 | `is_valid_activity_flows` + `activity_flows_agent_ok` + due clock + not `Dormant_*` | `wallet_activity_transfers_insert` | Staging `wallets.wallet_activity_transfers` (INSERT-only) |
+| 9 | [`wallet_activity_flows`](../workers/wallet_activity_flows/README.md) | Claim (`wallet_transactions`, matrix 4) | UTC window **18:00→12:00**: cuts 1/15 00:00 + drain `18,22,2,6,10`; closed 12–18 | `is_valid_activity_flows` + `activity_flows_agent_ok` + due clock + not `Dormant_*` + address ≠ `0x0` | `wallet_activity_transfers_insert` | Staging `wallets.wallet_activity_transfers` (INSERT-only) |
 | 9b | [`wallet_funding_transfers`](../workers/wallet_funding_transfers/README.md) | Claim (`wallet_transactions`, matrix 4) | UTC window **18:00→12:00**: drain `18,0,6`; closed 12–18 | `is_valid_funding_transfers` + due clock; non-`Dormant_*` first | `wallet_funding_transfers_insert` | `wallets.wallet_funding_transfers` (first ~500 incoming, INSERT-only) |
 | 10 | [`agent_uri_resolve`](../workers/agent_uri_resolve/README.md) | Claim (agents / feedbacks) | 00:00, 12:00 | `is_uri_processed` / `is_feedback_processed` | direct SQL | `uri_documents` + `agent_manifest` |
 | 11 | [`agent_uri_reprocess`](../workers/agent_uri_reprocess/README.md) | Claim (manifest errors + docs) | 06:00, 18:00 | download errors / off-chain &gt;15d | direct SQL | retry + refresh `uri_documents` (failed refresh still stamps `fetched_at`) |
@@ -146,7 +146,7 @@ Worker README: [`wallet_lp_positions_discovery`](../workers/wallet_lp_positions_
 **Live (schema must be applied first).** Matrix 4 cells by provider group. Active only in UTC window **18:00→12:00** (closed **12:00–18:00**): cron cuts days **1 and 15** 00:00 UTC plus drain at **18,22,2,6,10** until the claim queue is empty (`exit 0`). Soft-stop if a run crosses into the closed window. INSERT-only into `wallets.wallet_activity_transfers`. Does not compute Walcert metrics or DELETE staging.
 
 ```
-claim (activity_flows_agent_ok, no Dormant_*, no FIFO ORDER BY) →
+claim (activity_flows_agent_ok, no Dormant_*, exclude 0x0, no FIFO ORDER BY) →
   adapter (Etherscan / Alchemy / Ankr / OKX Data API) →
   INSERT staging ON CONFLICT DO NOTHING →
   next calendar cut (day 15 or day 1 next month, UTC)
@@ -156,7 +156,7 @@ claim (activity_flows_agent_ok, no Dormant_*, no FIFO ORDER BY) →
 |---|---|
 | Groups | `etherscan` (ETH/Arb/Polygon/Celo); `alchemy_k1` (Base/Gnosis); `bsc` (Alchemy key_2 on day-1 cut, Ankr on day-15 cut with `pageSize=1000`; **through 2026-08-31 UTC** leftover day-15 BSC uses Alchemy key_2); `xlayer` (OKX Data API) |
 | Schedule | UTC **18:00→12:00** (closed 12–18); soft-stop + `ignore_schedule_window` |
-| Claim gate | Denormalized `activity_flows_agent_ok` (index `idx_wallet_transactions_activity_flows_claim`); logs `claim_ms` / `save_ms` |
+| Claim gate | Denormalized `activity_flows_agent_ok` (index `idx_wallet_transactions_activity_flows_claim`); excludes `0x0`; logs `claim_ms` / `save_ms` |
 | Window | Last ~15 days; native + ERC-20/721/1155 |
 | Empty wallet | Completes OK with no INSERT |
 | Gnosis timestamps | Worker `eth_getBlockByNumber` + `erc_8004.block_cache` (Alchemy without `withMetadata`) |

@@ -14,17 +14,23 @@ from psycopg.rows import dict_row
 
 logger = logging.getLogger("wallet_activity_flows")
 
-CLAIM_ROWS_SQL = """
+# Null/burn address: alchemy_getAssetTransfers paginates forever and OOMs the
+# GHA runner on insert_and_mark_done (seen BSC wt with 0x0, 2026-09-10).
+ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+
+CLAIM_ROWS_SQL = f"""
 WITH candidates AS (
   SELECT wt.id
   FROM erc_8004.wallet_transactions wt
   JOIN erc_8004.chains c ON c.id = wt.chain_id
+  JOIN erc_8004.wallets w ON w.id = wt.wallet_id
   WHERE c.chain_id = ANY(%(evm_ids)s)
     AND wt.is_valid_activity_flows IS TRUE
     AND wt.activity_flows_agent_ok IS TRUE
     AND wt.activity_flows_next_eligible_at IS NOT NULL
     AND wt.activity_flows_next_eligible_at <= NOW()
     AND COALESCE(wt.wallet_category, '') NOT LIKE 'Dormant_%%'
+    AND lower(w.address) <> '{ZERO_ADDRESS}'
     AND (
       wt.activity_flows_claimed_at IS NULL
       OR wt.activity_flows_claimed_at

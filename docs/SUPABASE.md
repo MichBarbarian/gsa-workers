@@ -120,7 +120,7 @@ Trigger `trg_wallet_transactions_lp_flag_bu` sets LP pending when portfolio disc
 | `activity_flows_completed_at` | Last successful ingest (empty window still counts) |
 | `has_activity_flows_error` / `activity_flows_message_error` | Last failure (requeue +1h) |
 
-Eligibility: `is_valid_activity_flows` + `activity_flows_agent_ok` + due clock + `wallet_category NOT LIKE 'Dormant_%'`. Index: `idx_wallet_transactions_activity_flows_claim`. No FIFO `ORDER BY` on claim (full-set 15d drain). Schedule: UTC window **18:00→12:00** (closed 12–18).
+Eligibility: `is_valid_activity_flows` + `activity_flows_agent_ok` + due clock + `wallet_category NOT LIKE 'Dormant_%'` + `lower(wallets.address) <> 0x0` (null address excluded — Alchemy transfer pagination OOMs the runner). Index: `idx_wallet_transactions_activity_flows_claim`. No FIFO `ORDER BY` on claim (full-set 15d drain). Schedule: UTC window **18:00→12:00** (closed 12–18).
 
 ```sql
 SELECT

@@ -151,7 +151,7 @@ Monitoring SQL: [SUPABASE.md](./SUPABASE.md) (Agent URI sections). READMEs: [`ag
 
 ## Wallet activity flows 15d
 
-Staging ingest into `wallets.wallet_activity_transfers` (`workers/wallet_activity_flows`). Claims `erc_8004.wallet_transactions` with `activity_flows_agent_ok` (no per-claim `EXISTS`). Soft-stop outside the window.
+Staging ingest into `wallets.wallet_activity_transfers` (`workers/wallet_activity_flows`). Claims `erc_8004.wallet_transactions` with `activity_flows_agent_ok` (no per-claim `EXISTS`); skips null address `0x0` (Alchemy pagination OOMs the runner). Soft-stop outside the window.
 
 Matrix groups: `etherscan` · `alchemy_k1` · `bsc` · `xlayer`. Active UTC window **18:00→12:00** (cuts `0 0 1,15 * *` + drain `0 18,22,2,6,10 * * *`; closed 12–18) + `workflow_dispatch` (`ignore_schedule_window`).
 
