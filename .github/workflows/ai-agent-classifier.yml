@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "classify (default) or backfill_hash (donors missing ai_category_input_hash)"
+        description: "classify | backfill_hash | probe_nvidia"
         required: false
         default: "classify"
       providers:
@@ -56,8 +56,15 @@ jobs:
           BACKFILL_BATCH_SIZE: "1000"
         run: uv run python backfill_input_hash.py
 
+      - name: Probe NVIDIA NIM catalog
+        if: ${{ inputs.mode == 'probe_nvidia' }}
+        working-directory: workers/ai_agent_classifier
+        env:
+          NVIDIA: ${{ secrets.NVIDIA }}
+        run: uv run python probe_nvidia_catalog.py
+
       - name: Run AI agent classifier
-        if: ${{ inputs.mode != 'backfill_hash' }}
+        if: ${{ inputs.mode != 'backfill_hash' && inputs.mode != 'probe_nvidia' }}
         working-directory: workers/ai_agent_classifier
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -69,6 +76,7 @@ jobs:
           NVIDIA: ${{ secrets.NVIDIA }}
           MISTRAL: ${{ secrets.MISTRAL }}
           CLOUDFLARE: ${{ secrets.CLOUDFLARE }}
+          ZAI: ${{ secrets.ZAI }}
           MAX_RUNTIME_SECONDS: ${{ inputs.max_runtime_seconds || '19800' }}
           PROVIDERS: ${{ inputs.providers }}
           CONCURRENCY: 2
@@ -77,5 +85,5 @@ jobs:
           CLAIM_BATCH_SIZE: 20
           REQUEUE_ERROR_BATCH_SIZE: 1000
           # Per-provider asyncio concurrency (2 helps drain Groq/Cerebras RPM).
-          # Optional PROVIDERS filter: Groq,Cerebras,GEMINI,OpenRouter,TokenRouter,NVIDIA,Mistral,Cloudflare
+          # Optional PROVIDERS filter: Groq,Cerebras,GEMINI,OpenRouter,TokenRouter,NVIDIA,Mistral,Cloudflare,ZAI
         run: uv run python job.py
